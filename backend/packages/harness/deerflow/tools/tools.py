@@ -10,6 +10,7 @@ from deerflow.sandbox.security import is_host_bash_allowed
 from deerflow.tools.builtins import (
     ask_clarification_tool,
     cancel_background_task,
+    fork_task_tool,
     list_background_tasks,
     list_uploaded_files,
     present_file_tool,
@@ -31,6 +32,10 @@ BUILTIN_TOOLS = [
 SUBAGENT_TOOLS = [
     task_tool,
     # task_status_tool is no longer exposed to LLM (backend handles polling internally)
+]
+
+FORK_TOOLS = [
+    fork_task_tool,
 ]
 
 
@@ -57,6 +62,7 @@ def get_available_tools(
     include_mcp: bool = True,
     model_name: str | None = None,
     subagent_enabled: bool = False,
+    fork_enabled: bool = False,
     *,
     include_upload_tool: bool = True,
     app_config: AppConfig | None = None,
@@ -70,7 +76,8 @@ def get_available_tools(
         groups: Optional list of tool groups to filter by.
         include_mcp: Whether to include tools from MCP servers (default: True).
         model_name: Optional model name to determine if vision tools should be included.
-        subagent_enabled: Whether to include subagent tools (task, task_status).
+        subagent_enabled: Whether to include subagent tools (task).
+        fork_enabled: Whether to include ``fork_task`` (state-forking branches).
         include_upload_tool: Whether to include ``list_uploaded_files`` (default: True).
             Set to False for subagent tool assembly — subagents have independent
             ThreadState and cannot exclude current-run files.
@@ -118,6 +125,10 @@ def get_available_tools(
     if subagent_enabled:
         builtin_tools.extend(SUBAGENT_TOOLS)
         logger.info("Including subagent tools (task)")
+
+    if fork_enabled:
+        builtin_tools.extend(FORK_TOOLS)
+        logger.info("Including fork_task tool")
 
     # If no model_name specified, use the first model (default)
     if model_name is None and config.models:

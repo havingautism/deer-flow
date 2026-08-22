@@ -97,7 +97,7 @@ class CustomSubagentConfig(BaseModel):
         description="Tool names whitelist (None = inherit all tools from parent)",
     )
     disallowed_tools: list[str] | None = Field(
-        default_factory=lambda: ["task", "ask_clarification", "present_files"],
+        default_factory=lambda: ["task", "fork_task", "ask_clarification", "present_files"],
         description="Tool names to deny",
     )
     skills: list[str] | None = Field(

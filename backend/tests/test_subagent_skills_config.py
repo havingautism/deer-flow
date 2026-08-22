@@ -104,7 +104,7 @@ class TestCustomSubagentConfig:
         assert config.description == "A test agent"
         assert config.system_prompt == "You are a test agent."
         assert config.tools is None
-        assert config.disallowed_tools == ["task", "ask_clarification", "present_files"]
+        assert config.disallowed_tools == ["task", "fork_task", "ask_clarification", "present_files"]
         assert config.skills is None
         assert config.model == "inherit"
         assert config.max_turns == 50

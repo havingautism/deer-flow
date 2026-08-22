@@ -436,6 +436,10 @@ class TestIdentifyCaller:
         j, _ = journal_setup
         assert j._identify_caller(["middleware:summarization"]) == "middleware:summarization"
 
+    def test_fork_tag_wins_over_inherited_lead_agent(self, journal_setup):
+        j, _ = journal_setup
+        assert j._identify_caller(["lead_agent", "fork:tc-1"]) == "fork:tc-1"
+
     def test_no_tags_returns_lead_agent(self, journal_setup):
         j, _ = journal_setup
         assert j._identify_caller([]) == "lead_agent"
@@ -880,6 +884,24 @@ class TestExternalUsageRecords:
         j.record_external_llm_usage_records(records)
         assert j._subagent_tokens == 45
         assert j._total_tokens == 45
+
+    def test_fork_records_do_not_inflate_lead_agent_tokens(self, journal_setup):
+        j, _ = journal_setup
+        j.record_external_llm_usage_records(
+            [
+                {
+                    "source_run_id": "fork-1",
+                    "caller": "fork:tc-1",
+                    "input_tokens": 100,
+                    "output_tokens": 10,
+                    "total_tokens": 110,
+                    "cache_read_tokens": 80,
+                }
+            ]
+        )
+        assert j._lead_agent_tokens == 0
+        assert j._subagent_tokens == 0
+        assert j._total_tokens == 110
 
     def test_external_records_coexist_with_inline_callbacks(self, journal_setup):
         """External records and inline on_llm_end must not interfere."""

@@ -1371,4 +1371,29 @@ describe("orphan tool messages", () => {
     expect(t1b).toBeDefined();
     expect(t1b?.type).toBe("tool");
   });
+
+  test("groups fork_task calls as assistant:subagent", () => {
+    const groups = getMessageGroups([
+      { id: "human-1", type: "human", content: "compare both" },
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          { id: "fork-a", name: "fork_task", args: { prompt: "try A" } },
+        ],
+      },
+      {
+        id: "tool-1",
+        type: "tool",
+        name: "fork_task",
+        tool_call_id: "fork-a",
+        content: "Fork Succeeded. Result: A",
+      },
+    ] as Message[]);
+    expect(groups.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:subagent",
+    ]);
+  });
 });

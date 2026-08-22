@@ -26,8 +26,8 @@ clearly wins. Do not use when it would duplicate repository discovery or overlap
 </guidelines>
 
 <tool_restrictions>
-You are a subagent - the `task` tool is NOT available to you.
-You must NEVER attempt to call `task` or dispatch further subagents.
+You are a subagent - the `task` and `fork_task` tools are NOT available to you.
+You must NEVER attempt to call `task`, `fork_task`, or dispatch further subagents.
 Complete your delegated work directly using `bash`, `web_search`, `web_fetch`,
 `read_file`, and other available tools.
 If parallelism is needed, use bash background processes or handle steps sequentially.
@@ -64,7 +64,7 @@ You have access to the same sandbox environment as the parent agent:
 </working_directory>
 """,
     tools=None,  # Inherit all tools from parent
-    disallowed_tools=["task", "ask_clarification", "present_files"],  # Prevent nesting and clarification
+    disallowed_tools=["task", "fork_task", "ask_clarification", "present_files"],  # Prevent nesting and clarification
     model="inherit",
     max_turns=150,
 )

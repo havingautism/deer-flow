@@ -199,7 +199,7 @@ export const enUS: Translations = {
       "Reasoning, planning and executing, get more accurate results, may take more time",
     ultraMode: "Ultra",
     ultraModeDescription:
-      "Pro mode with subagents to divide work; best for complex multi-step tasks",
+      "Pro mode with subagents and parallel tasks enabled; best for complex multi-step tasks",
     reasoningEffort: "Reasoning Effort",
     reasoningEffortMinimal: "Minimal",
     reasoningEffortMinimalDescription: "Retrieval + Direct Output",
@@ -727,6 +727,7 @@ export const enUS: Translations = {
 
   subtasks: {
     subtask: "Subtask",
+    fork: "Fork",
     executing: (count: number) =>
       `Executing ${count === 1 ? "" : count + " "}subtask${count === 1 ? "" : "s in parallel"}`,
     in_progress: "Running subtask",
@@ -746,6 +747,7 @@ export const enUS: Translations = {
       "No token usage yet. Usage appears only after a successful model response when the provider returns usage_metadata.",
     unavailableShort: "No usage returned",
     collecting: "Collecting tokens",
+    cache: "cache",
     note: "Header totals use persisted thread usage, plus visible in-flight usage while a run is still streaming. Per-turn and debug usage come from currently visible messages only. Totals may differ from provider billing pages.",
     presets: {
       off: "Off",
@@ -764,6 +766,7 @@ export const enUS: Translations = {
     stepTotal: "Step total",
     sharedAttribution: "Shared across multiple actions in this step",
     subagent: (description: string) => `Subagent: ${description}`,
+    fork: (description: string) => `Fork: ${description}`,
     startTodo: (content: string) => `Start To-do: ${content}`,
     completeTodo: (content: string) => `Complete To-do: ${content}`,
     updateTodo: (content: string) => `Update To-do: ${content}`,

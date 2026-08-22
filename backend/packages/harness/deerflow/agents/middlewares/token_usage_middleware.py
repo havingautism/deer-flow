@@ -159,12 +159,12 @@ def _describe_tool_call(tool_call: dict[str, Any], todos: list[Todo]) -> list[di
             for action in actions
         ]
 
-    if name == "task":
+    if name in {"task", "fork_task"}:
         return [
             {
                 "kind": "subagent",
-                "description": _string_arg(args.get("description")),
-                "subagent_type": _string_arg(args.get("subagent_type")),
+                "description": _string_arg(args.get("description") or args.get("prompt")),
+                "subagent_type": "fork" if name == "fork_task" else _string_arg(args.get("subagent_type")),
                 "tool_call_id": tool_call_id,
             }
         ]
@@ -232,7 +232,14 @@ def _has_tool_call(message: AIMessage, tool_call_id: str) -> bool:
 
 
 def _subagent_usage_from_tool_message(message: ToolMessage) -> dict[str, int] | None:
-    """Read validated subagent usage from the current run's message state."""
+    """Read validated subagent usage from the current run's message state.
+
+    ``fork_task`` results keep their usage on the ToolMessage for the fork card.
+    Merging them here would fold branch tokens into the lead turn's original
+    usage_metadata, which the UI already shows separately.
+    """
+    if getattr(message, "name", None) == "fork_task":
+        return None
     additional_kwargs = getattr(message, "additional_kwargs", None)
     if not isinstance(additional_kwargs, dict):
         return None

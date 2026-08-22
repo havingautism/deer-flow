@@ -34,6 +34,7 @@ class RuntimeFeatures:
     memory_config: MemoryConfig | None = None
     summarization: Literal[False] | AgentMiddleware = False
     subagent: bool | AgentMiddleware = False
+    fork: bool | AgentMiddleware = False
     vision: bool | AgentMiddleware = False
     auto_title: bool | AgentMiddleware = False
     guardrail: Literal[False] | AgentMiddleware = False

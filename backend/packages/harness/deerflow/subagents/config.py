@@ -35,7 +35,7 @@ class SubagentConfig:
     description: str
     system_prompt: str | None = None
     tools: list[str] | None = None
-    disallowed_tools: list[str] | None = field(default_factory=lambda: ["task"])
+    disallowed_tools: list[str] | None = field(default_factory=lambda: ["task", "fork_task"])
     skills: list[str] | None = None
     model: str = "inherit"
     max_turns: int = 50

@@ -37,6 +37,7 @@ import {
   extractContentFromMessage,
   extractReasoningContentFromMessage,
   extractTextFromMessage,
+  isParallelTaskTool,
 } from "@/core/messages/utils";
 import { extractTitleFromMarkdown } from "@/core/utils/markdown";
 import { env } from "@/env";
@@ -1007,7 +1008,7 @@ function convertToSteps(messages: Message[]): CoTStep[] {
         });
       }
       for (const tool_call of message.tool_calls ?? []) {
-        if (tool_call.name === "task") {
+        if (isParallelTaskTool(tool_call.name)) {
           continue;
         }
         const step: CoTToolCallStep = {

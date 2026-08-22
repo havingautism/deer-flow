@@ -171,6 +171,28 @@ describe("parseSubtaskResult — structured additional_kwargs (preferred path)",
     });
   });
 
+  it("keeps prompt-cache hits on the subtask usage snapshot", () => {
+    expect(
+      parseSubtaskResult("Fork Succeeded. Result: done", {
+        [SUBAGENT_STATUS_KEY]: "completed",
+        [SUBAGENT_TOKEN_USAGE_KEY]: {
+          input_tokens: 100,
+          output_tokens: 10,
+          total_tokens: 110,
+          cache_read_tokens: 80,
+        },
+      }),
+    ).toMatchObject({
+      status: "completed",
+      usage: {
+        inputTokens: 100,
+        outputTokens: 10,
+        totalTokens: 110,
+        cacheReadTokens: 80,
+      },
+    });
+  });
+
   it("collapses cancelled / timed_out / polling_timed_out to failed for the card UI", () => {
     for (const backendStatus of [
       "cancelled",

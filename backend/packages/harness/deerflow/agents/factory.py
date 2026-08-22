@@ -165,7 +165,7 @@ def create_deerflow_agent(
         checkpoint_snapshot_frequency,
     )
 
-    return create_agent(
+    graph = create_agent(
         model=model,
         tools=effective_tools or None,
         middleware=effective_middleware,
@@ -174,6 +174,12 @@ def create_deerflow_agent(
         checkpointer=checkpointer,
         name=name,
     )
+    from deerflow.forks import ForkHostMiddleware
+
+    for middleware in effective_middleware:
+        if isinstance(middleware, ForkHostMiddleware):
+            middleware.graph = graph
+    return graph
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +327,18 @@ def _assemble_from_features(
         from deerflow.tools.builtins import task_tool
 
         extra_tools.append(task_tool)
+
+    # --- [11b] Fork ---
+    if feat.fork is not False:
+        from deerflow.forks import ForkExecutionGuardMiddleware, ForkHostMiddleware
+        from deerflow.tools.builtins import fork_task_tool
+
+        if isinstance(feat.fork, AgentMiddleware):
+            chain.append(feat.fork)
+        else:
+            chain.append(ForkHostMiddleware())
+            chain.append(ForkExecutionGuardMiddleware())
+        extra_tools.append(fork_task_tool)
 
     # --- [12] LoopDetection ---
     if feat.loop_detection is not False:

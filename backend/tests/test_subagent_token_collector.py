@@ -186,3 +186,21 @@ class TestSubagentTokenCollector:
         collector.on_llm_end(response, run_id=uuid4())
         records = collector.snapshot_records()
         assert len(records) == 0
+
+
+def test_summarize_token_usage_records_includes_sparse_cache():
+    from deerflow.subagents.token_collector import summarize_token_usage_records
+
+    assert summarize_token_usage_records(None) is None
+    assert summarize_token_usage_records([]) is None
+    assert summarize_token_usage_records(
+        [
+            {"input_tokens": 40, "output_tokens": 5, "total_tokens": 45, "cache_read_tokens": 30},
+            {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        ]
+    ) == {
+        "input_tokens": 50,
+        "output_tokens": 10,
+        "total_tokens": 60,
+        "cache_read_tokens": 30,
+    }

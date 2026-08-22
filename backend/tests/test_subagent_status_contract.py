@@ -19,6 +19,7 @@ from deerflow.subagents.status_contract import (
     _bound_metadata_text,
     format_subagent_result_message,
     make_subagent_additional_kwargs,
+    normalize_token_usage,
     read_subagent_result_metadata,
 )
 
@@ -64,6 +65,39 @@ def test_make_subagent_additional_kwargs_carries_terminal_runtime_metadata():
         "input_tokens": 100,
         "output_tokens": 20,
         "total_tokens": 120,
+    }
+
+
+def test_normalize_token_usage_keeps_sparse_cache_read():
+    assert normalize_token_usage(
+        {"input_tokens": 100, "output_tokens": 10, "total_tokens": 110, "cache_read_tokens": 80}
+    ) == {"input_tokens": 100, "output_tokens": 10, "total_tokens": 110, "cache_read_tokens": 80}
+    assert "cache_read_tokens" not in normalize_token_usage(
+        {"input_tokens": 100, "output_tokens": 10, "total_tokens": 110, "cache_read_tokens": 0}
+    )
+    assert "cache_read_tokens" not in normalize_token_usage(
+        {"input_tokens": 100, "output_tokens": 10, "total_tokens": 110, "cache_read_tokens": "80"}
+    )
+
+
+def test_make_subagent_additional_kwargs_keeps_sparse_cache_read_tokens():
+    from deerflow.subagents.status_contract import normalize_token_usage
+
+    kwargs = make_subagent_additional_kwargs(
+        "completed",
+        result="done",
+        token_usage={"input_tokens": 100, "output_tokens": 10, "total_tokens": 110, "cache_read_tokens": 80},
+    )
+    assert kwargs[SUBAGENT_TOKEN_USAGE_KEY] == {
+        "input_tokens": 100,
+        "output_tokens": 10,
+        "total_tokens": 110,
+        "cache_read_tokens": 80,
+    }
+    assert normalize_token_usage({"input_tokens": 1, "output_tokens": 1, "total_tokens": 2, "cache_read_tokens": 0}) == {
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "total_tokens": 2,
     }
 
 

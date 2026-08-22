@@ -58,6 +58,7 @@ import {
   hasContent,
   hasPresentFiles,
   hasReasoning,
+  isParallelTaskTool,
   isAssistantMessageGroupStreaming,
   isHiddenFromUIMessage,
   type MessageGroup as ThreadMessageGroup,
@@ -1231,7 +1232,7 @@ export function MessageList({
                 for (const message of group.messages) {
                   if (message.type === "ai") {
                     for (const toolCall of message.tool_calls ?? []) {
-                      if (toolCall.name === "task") {
+                      if (isParallelTaskTool(toolCall.name)) {
                         const taskId = toolCall.id;
                         if (!taskId) {
                           continue;
@@ -1241,11 +1242,26 @@ export function MessageList({
                           group.messages,
                           groupIsLoading,
                         );
+                        const prompt =
+                          typeof toolCall.args.prompt === "string"
+                            ? toolCall.args.prompt
+                            : "";
+                        const description =
+                          typeof toolCall.args.description === "string" &&
+                          toolCall.args.description.trim()
+                            ? toolCall.args.description
+                            : prompt.trim() ||
+                              (toolCall.name === "fork_task"
+                                ? t.subtasks.fork
+                                : t.subtasks.subtask);
                         const task: Subtask = {
                           id: taskId,
-                          subagent_type: toolCall.args.subagent_type,
-                          description: toolCall.args.description,
-                          prompt: toolCall.args.prompt,
+                          subagent_type:
+                            toolCall.name === "fork_task"
+                              ? "fork"
+                              : String(toolCall.args.subagent_type ?? ""),
+                          description,
+                          prompt,
                           status,
                           ...(status === "failed"
                             ? { error: t.subtasks.failed }
@@ -1299,7 +1315,7 @@ export function MessageList({
                     subagentDebugMessageIds.push(message.id);
                   }
                   const taskIds = message.tool_calls?.flatMap((toolCall) =>
-                    toolCall.name === "task" && toolCall.id
+                    isParallelTaskTool(toolCall.name) && toolCall.id
                       ? [toolCall.id]
                       : [],
                   );

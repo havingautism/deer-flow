@@ -301,10 +301,11 @@ class DeerFlowClient:
             model_name = self._app_config.models[0].name
         model_name = _authorize_model_name(model_name, context=cfg, app_config=self._app_config)
         subagent_enabled = cfg.get("subagent_enabled", False)
+        fork_enabled = cfg.get("fork_enabled", subagent_enabled)
         max_concurrent_subagents = cfg.get("max_concurrent_subagents", 3)
         max_total_subagents = cfg.get("max_total_subagents", self._app_config.subagents.max_total_per_run)
 
-        tools = self._get_tools(model_name=model_name, subagent_enabled=subagent_enabled)
+        tools = self._get_tools(model_name=model_name, subagent_enabled=subagent_enabled, fork_enabled=fork_enabled)
 
         # Add framework-provided tools before authorization so Layer 1 sees
         # every capability that can become model-visible.
@@ -376,6 +377,7 @@ class DeerFlowClient:
                 mcp_routing_hints_section=mcp_routing_hints_section,
                 user_id=effective_user_id,
                 skill_names=skill_setup.skill_names or None,
+                fork_enabled=fork_enabled,
             ),
             "state_schema": get_thread_state_schema(self._checkpoint_channel_mode, self._checkpoint_snapshot_frequency),
         }
@@ -388,15 +390,20 @@ class DeerFlowClient:
             kwargs["checkpointer"] = checkpointer
 
         self._agent = create_agent(**kwargs)
+        from deerflow.forks import ForkHostMiddleware
+
+        for middleware in kwargs["middleware"]:
+            if isinstance(middleware, ForkHostMiddleware):
+                middleware.graph = self._agent
         self._agent_config_key = key
         logger.info("Agent created: agent_name=%s, model=%s, thinking=%s", self._agent_name, model_name, thinking_enabled)
 
     @staticmethod
-    def _get_tools(*, model_name: str | None, subagent_enabled: bool):
+    def _get_tools(*, model_name: str | None, subagent_enabled: bool, fork_enabled: bool = False):
         """Lazy import to avoid circular dependency at module level."""
         from deerflow.tools import get_available_tools
 
-        return get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled)
+        return get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, fork_enabled=fork_enabled)
 
     @staticmethod
     def _serialize_tool_calls(tool_calls) -> list[dict]:

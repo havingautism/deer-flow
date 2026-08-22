@@ -133,6 +133,21 @@ class TestTruncateTaskCalls:
         assert task_calls[0]["id"] == "t1"
         assert task_calls[1]["id"] == "t2"
 
+    def test_fork_task_calls_count_toward_concurrent_limit(self):
+        mw = SubagentLimitMiddleware(max_concurrent=2)
+        msg = AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "fork_task", "id": "f1", "args": {"prompt": "A"}},
+                {"name": "fork_task", "id": "f2", "args": {"prompt": "B"}},
+                {"name": "fork_task", "id": "f3", "args": {"prompt": "C"}},
+            ],
+        )
+        result = mw._truncate_task_calls({"messages": [msg]})
+        assert result is not None
+        fork_calls = [tc for tc in result["messages"][0].tool_calls if tc["name"] == "fork_task"]
+        assert [tc["id"] for tc in fork_calls] == ["f1", "f2"]
+
     def test_non_task_calls_preserved(self):
         mw = SubagentLimitMiddleware(max_concurrent=2)
         msg = AIMessage(

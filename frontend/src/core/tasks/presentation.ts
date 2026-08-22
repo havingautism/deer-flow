@@ -16,6 +16,14 @@ export function resolveSubtaskModelLabel(
 
 export function formatSubtaskTokenUsage(
   usage: TokenUsage | undefined,
+  cacheLabel?: string,
 ): string | undefined {
-  return usage ? formatTokenCount(usage.totalTokens) : undefined;
+  if (!usage) {
+    return undefined;
+  }
+  const total = formatTokenCount(usage.totalTokens);
+  if (usage.cacheReadTokens && usage.cacheReadTokens > 0 && cacheLabel) {
+    return `${total} · ${formatTokenCount(usage.cacheReadTokens)} ${cacheLabel}`;
+  }
+  return total;
 }

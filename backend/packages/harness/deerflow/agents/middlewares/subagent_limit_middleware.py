@@ -127,8 +127,8 @@ class SubagentLimitMiddleware(AgentMiddleware[AgentState]):
         if not tool_calls:
             return None
 
-        # Count task tool calls
-        task_indices = [i for i, tc in enumerate(tool_calls) if tc.get("name") == "task"]
+        # Count isolated-subagent `task` calls and cache-friendly `fork_task` calls.
+        task_indices = [i for i, tc in enumerate(tool_calls) if tc.get("name") in {"task", "fork_task"}]
         if not task_indices:
             return None
 

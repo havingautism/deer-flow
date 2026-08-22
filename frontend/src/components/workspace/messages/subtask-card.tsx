@@ -2,6 +2,7 @@ import {
   CheckCircleIcon,
   ChevronUp,
   ClipboardListIcon,
+  CoinsIcon,
   Loader2Icon,
   SparklesIcon,
   WrenchIcon,
@@ -16,9 +17,8 @@ import {
 } from "@/components/ai-elements/chain-of-thought";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { ShineBorder } from "@/components/ui/shine-border";
 import { useI18n } from "@/core/i18n/hooks";
-import { hasToolCalls } from "@/core/messages/utils";
+import { formatTokenCount } from "@/core/messages/usage";
 import { useModels } from "@/core/models/hooks";
 import {
   streamdownPluginsWithoutRawHtml,
@@ -30,18 +30,32 @@ import {
 } from "@/core/streamdown/components";
 import { fetchSubtaskSteps } from "@/core/tasks/api";
 import { useSubtask, useUpdateSubtask } from "@/core/tasks/context";
-import {
-  formatSubtaskTokenUsage,
-  resolveSubtaskModelLabel,
-} from "@/core/tasks/presentation";
 import { stepsForDisplay } from "@/core/tasks/steps";
-import { explainLastToolCall } from "@/core/tools/utils";
 import { cn } from "@/lib/utils";
 
 import { CitationLink } from "../citations/citation-link";
-import { FlipDisplay } from "../flip-display";
 
 import { MarkdownContent } from "./markdown-content";
+
+function StatusGlyph({
+  status,
+  className,
+}: {
+  status: "completed" | "failed" | "in_progress" | "pending";
+  className?: string;
+}) {
+  const iconClass = cn("text-muted-foreground size-3.5", className);
+  if (status === "completed") {
+    return <CheckCircleIcon className={iconClass} strokeWidth={1.75} />;
+  }
+  if (status === "failed") {
+    return <XCircleIcon className={iconClass} strokeWidth={1.75} />;
+  }
+  if (status === "in_progress") {
+    return <Loader2Icon className={cn(iconClass, "animate-spin")} />;
+  }
+  return null;
+}
 
 export function SubtaskCard({
   className,
@@ -59,19 +73,16 @@ export function SubtaskCard({
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
   const task = useSubtask(taskId)!;
-  const { models, tokenUsageEnabled } = useModels();
+  const { tokenUsageEnabled } = useModels();
   const updateSubtask = useUpdateSubtask();
-  const modelLabel = resolveSubtaskModelLabel(task.modelName, models);
-  const tokenLabel = tokenUsageEnabled
-    ? formatSubtaskTokenUsage(task.usage)
-    : undefined;
-  const runtimeUsageLabel = tokenUsageEnabled
-    ? tokenLabel
-      ? `${tokenLabel} ${t.tokenUsage.label}`
-      : task.status === "in_progress"
-        ? t.tokenUsage.collecting
-        : t.tokenUsage.unavailableShort
-    : undefined;
+  const cacheLabel =
+    tokenUsageEnabled && task.usage?.cacheReadTokens
+      ? `${formatTokenCount(task.usage.cacheReadTokens)} ${t.tokenUsage.cache}`
+      : undefined;
+  const tokenTotal =
+    tokenUsageEnabled && task.usage
+      ? formatTokenCount(task.usage.totalTokens)
+      : undefined;
 
   // The card shows the subagent's step timeline (#3779): its reasoning turns
   // (AI text) interleaved with the tools it ran (by name). See stepsForDisplay
@@ -101,92 +112,49 @@ export function SubtaskCard({
         backfilledRef.current = false;
       });
   }, [collapsed, stepsCount, threadId, runId, taskId, updateSubtask]);
-  const icon = useMemo(() => {
-    if (task.status === "completed") {
-      return <CheckCircleIcon className="size-3" />;
-    } else if (task.status === "failed") {
-      return <XCircleIcon className="size-3 text-red-500" />;
-    } else if (task.status === "in_progress") {
-      return <Loader2Icon className="size-3 animate-spin" />;
-    }
-  }, [task.status]);
+  const statusIcon = useMemo(
+    () => <StatusGlyph status={task.status} />,
+    [task.status],
+  );
   return (
     <ChainOfThought
-      className={cn("relative w-full gap-2 rounded-lg border py-0", className)}
+      className={cn(
+        "relative w-full min-w-0 overflow-hidden gap-2 rounded-lg border py-0",
+        className,
+      )}
       open={!collapsed}
     >
-      <div
-        className={cn(
-          "ambilight z-[-1]",
-          task.status === "in_progress" ? "enabled" : "",
-        )}
-      ></div>
-      {task.status === "in_progress" && (
-        <>
-          <ShineBorder
-            borderWidth={1.5}
-            shineColor={["#A07CFE", "#FE8FB5", "#FFBE7B"]}
-          />
-        </>
-      )}
-      <div className="bg-background/95 flex w-full flex-col rounded-lg">
-        <div className="flex w-full items-center justify-between p-0.5">
+      <div className="bg-background/95 flex w-full min-w-0 flex-col rounded-lg">
+        <div className="flex w-full min-w-0 items-center justify-between p-0.5">
           <Button
-            className="w-full items-start justify-start text-left"
+            className="w-full min-w-0 items-start justify-start overflow-hidden text-left"
             variant="ghost"
             onClick={() => setCollapsed(!collapsed)}
           >
-            <div className="flex w-full items-center justify-between">
+            <div className="flex w-full min-w-0 items-center justify-between gap-2">
               <ChainOfThoughtStep
-                className="font-normal"
+                className="min-w-0 flex-1 overflow-hidden font-normal"
                 label={
-                  task.status === "in_progress" ? (
-                    <Shimmer duration={3} spread={3}>
-                      {task.description}
-                    </Shimmer>
-                  ) : (
-                    task.description
-                  )
+                  <span className="block truncate" title={task.description}>
+                    {task.status === "in_progress" ? (
+                      <Shimmer className="max-w-full" duration={3} spread={3}>
+                        {task.description}
+                      </Shimmer>
+                    ) : (
+                      task.description
+                    )}
+                  </span>
                 }
                 icon={<ClipboardListIcon />}
               ></ChainOfThoughtStep>
-              <div className="flex items-center gap-1">
-                {collapsed && (
-                  <div
-                    className={cn(
-                      "text-muted-foreground flex items-center gap-1 text-xs font-normal",
-                      task.status === "failed" ? "text-red-500 opacity-67" : "",
-                    )}
-                  >
-                    {modelLabel && (
-                      <span className="max-w-32 truncate" title={modelLabel}>
-                        {modelLabel}
-                      </span>
-                    )}
-                    {runtimeUsageLabel && (
-                      <span
-                        className="max-w-28 truncate"
-                        title={runtimeUsageLabel}
-                      >
-                        {runtimeUsageLabel}
-                      </span>
-                    )}
-                    {icon}
-                    <FlipDisplay
-                      className="max-w-[420px] truncate pb-1"
-                      uniqueKey={task.latestMessage?.id ?? ""}
-                    >
-                      {task.status === "in_progress" &&
-                      task.latestMessage &&
-                      hasToolCalls(task.latestMessage)
-                        ? explainLastToolCall(task.latestMessage, t)
-                        : t.subtasks[task.status]}
-                    </FlipDisplay>
-                  </div>
-                )}
+              <div className="text-muted-foreground flex shrink-0 items-center gap-1.5">
+                <span className="text-xs font-normal">
+                  {t.subtasks[task.status]}
+                </span>
+                {statusIcon}
                 <ChevronUp
                   className={cn(
-                    "text-muted-foreground size-4",
+                    "size-4",
                     !collapsed ? "" : "rotate-180",
                   )}
                 />
@@ -194,18 +162,21 @@ export function SubtaskCard({
             </div>
           </Button>
         </div>
-        <ChainOfThoughtContent className="px-4 pb-4">
+        <ChainOfThoughtContent className="px-4 pb-3">
           {task.prompt && (
             <ChainOfThoughtStep
+              className="min-w-0"
               label={
-                <SafeStreamdown
-                  {...streamdownPluginsWithoutRawHtml}
-                  animated={streamdownWordAnimation}
-                  components={toStreamdownComponents({ a: CitationLink })}
-                  isAnimating={isLoading}
-                >
-                  {task.prompt}
-                </SafeStreamdown>
+                <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+                  <SafeStreamdown
+                    {...streamdownPluginsWithoutRawHtml}
+                    animated={streamdownWordAnimation}
+                    components={toStreamdownComponents({ a: CitationLink })}
+                    isAnimating={isLoading}
+                  >
+                    {task.prompt}
+                  </SafeStreamdown>
+                </div>
               }
             ></ChainOfThoughtStep>
           )}
@@ -213,11 +184,11 @@ export function SubtaskCard({
             const isLastWhileRunning =
               task.status === "in_progress" && i === displaySteps.length - 1;
             const icon = isLastWhileRunning ? (
-              <Loader2Icon className="size-4 animate-spin" />
+              <Loader2Icon className="text-muted-foreground size-4 animate-spin" />
             ) : step.kind === "tool" ? (
-              <WrenchIcon className="size-4" />
+              <WrenchIcon className="text-muted-foreground size-4" />
             ) : (
-              <SparklesIcon className="size-4" />
+              <SparklesIcon className="text-muted-foreground size-4" />
             );
             return (
               <ChainOfThoughtStep
@@ -239,7 +210,7 @@ export function SubtaskCard({
             <>
               <ChainOfThoughtStep
                 label={t.subtasks.completed}
-                icon={<CheckCircleIcon className="size-4" />}
+                icon={<CheckCircleIcon className="text-muted-foreground size-4" />}
               ></ChainOfThoughtStep>
               <ChainOfThoughtStep
                 label={
@@ -252,9 +223,32 @@ export function SubtaskCard({
           )}
           {task.status === "failed" && (
             <ChainOfThoughtStep
-              label={<div className="text-red-500">{task.error}</div>}
-              icon={<XCircleIcon className="size-4 text-red-500" />}
+              label={
+                <div className="text-muted-foreground">{task.error}</div>
+              }
+              icon={<XCircleIcon className="text-muted-foreground size-4" />}
             ></ChainOfThoughtStep>
+          )}
+          {tokenUsageEnabled && tokenTotal && (
+            <div className="mt-3 flex justify-end">
+              <div
+                className="text-muted-foreground bg-background/70 flex h-auto items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-normal"
+                title={
+                  cacheLabel
+                    ? `${t.tokenUsage.label} ${tokenTotal} · ${cacheLabel}`
+                    : `${t.tokenUsage.label} ${tokenTotal}`
+                }
+              >
+                <CoinsIcon size={14} />
+                <span>{t.tokenUsage.label}</span>
+                <span className="font-mono">{tokenTotal}</span>
+                {cacheLabel && (
+                  <span className="text-muted-foreground/80 border-l pl-1.5 font-mono">
+                    {cacheLabel}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </ChainOfThoughtContent>
       </div>

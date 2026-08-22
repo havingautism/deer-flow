@@ -766,9 +766,13 @@ export function extractPresentFilesFromMessage(message: Message) {
   return files;
 }
 
+export function isParallelTaskTool(name: string | undefined): boolean {
+  return name === "task" || name === "fork_task";
+}
+
 export function hasSubagent(message: AIMessage) {
   for (const toolCall of message.tool_calls ?? []) {
-    if (toolCall.name === "task") {
+    if (isParallelTaskTool(toolCall.name)) {
       return true;
     }
   }

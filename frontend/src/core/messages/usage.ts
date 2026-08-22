@@ -4,6 +4,8 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Prompt-cache hits. Sparse: omitted when the provider reported none. */
+  cacheReadTokens?: number;
 }
 
 /**
@@ -54,6 +56,7 @@ export function accumulateUsage(messages: Message[]): TokenUsage | null {
     totalTokens: 0,
   };
   let hasUsage = false;
+  let cacheReadTokens = 0;
   const countedMessageIds = new Set<string>();
 
   for (const message of messages) {
@@ -73,8 +76,14 @@ export function accumulateUsage(messages: Message[]): TokenUsage | null {
     cumulative.inputTokens += usage.inputTokens;
     cumulative.outputTokens += usage.outputTokens;
     cumulative.totalTokens += usage.totalTokens;
+    cacheReadTokens += usage.cacheReadTokens ?? 0;
   }
-  return hasUsage ? cumulative : null;
+  if (!hasUsage) {
+    return null;
+  }
+  return cacheReadTokens > 0
+    ? { ...cumulative, cacheReadTokens }
+    : cumulative;
 }
 
 /**
@@ -84,8 +93,9 @@ export function accumulateUsage(messages: Message[]): TokenUsage | null {
  * `task_running` event (`core/tasks/lifecycle.ts`) and the terminal ToolMessage
  * metadata (`core/tasks/subtask-result.ts`). Keeping one function stops the two
  * from drifting (e.g. one accepting an extra token field the other rejects).
- * Every key must be a finite, non-negative number or the whole snapshot is
- * rejected as `undefined`.
+ * The three required keys must be finite, non-negative numbers or the whole
+ * snapshot is rejected as `undefined`. `cache_read_tokens` is additive and
+ * sparse: a valid positive number is kept, anything else is omitted.
  */
 export function normalizeTokenUsage(value: unknown): TokenUsage | undefined {
   if (typeof value !== "object" || value === null) {
@@ -102,7 +112,10 @@ export function normalizeTokenUsage(value: unknown): TokenUsage | undefined {
   ) {
     return undefined;
   }
-  return { inputTokens, outputTokens, totalTokens };
+  const cacheReadTokens = nonNegativeNumber(record.cache_read_tokens);
+  return cacheReadTokens && cacheReadTokens > 0
+    ? { inputTokens, outputTokens, totalTokens, cacheReadTokens }
+    : { inputTokens, outputTokens, totalTokens };
 }
 
 function nonNegativeNumber(value: unknown): number | undefined {
@@ -122,10 +135,13 @@ export function hasNonZeroUsage(
 }
 
 export function addUsage(base: TokenUsage, delta: TokenUsage): TokenUsage {
+  const cacheReadTokens =
+    (base.cacheReadTokens ?? 0) + (delta.cacheReadTokens ?? 0);
   return {
     inputTokens: base.inputTokens + delta.inputTokens,
     outputTokens: base.outputTokens + delta.outputTokens,
     totalTokens: base.totalTokens + delta.totalTokens,
+    ...(cacheReadTokens > 0 ? { cacheReadTokens } : {}),
   };
 }
 

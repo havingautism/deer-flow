@@ -258,10 +258,18 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
 
     @override
     def after_model(self, state: TitleMiddlewareState, runtime: Runtime) -> dict | None:
+        from deerflow.forks.runtime import is_fork_runtime
+
+        if is_fork_runtime(runtime):
+            return None
         return self._generate_title_result(state)
 
     @override
     async def aafter_model(self, state: TitleMiddlewareState, runtime: Runtime) -> dict | None:
+        from deerflow.forks.runtime import is_fork_runtime
+
+        if is_fork_runtime(runtime):
+            return None
         from deerflow_extension_api import task_store_from_runtime
 
         return await self._agenerate_title_result(

@@ -338,6 +338,28 @@ def _build_available_subagents_description(available_names: list[str], bash_avai
     return "\n".join(lines)
 
 
+def _build_fork_task_section(max_concurrent: int) -> str:
+    """Describe cache-friendly state forks as a distinct primitive from `task`."""
+    n = clamp_subagent_concurrency(max_concurrent)
+    return f"""<fork_task_system>
+`fork_task` branches from the CURRENT lead-agent state. It is not a subagent.
+
+Use `task` when the work is independent, only needs scoped/fresh context, or benefits from a specialist subagent prompt/tool set.
+
+Use `fork_task` when the work depends heavily on the current conversation, several approaches should be explored against the same context, or preserving prefix/KV cache is desirable.
+
+How it works:
+- The branch inherits the lead agent's messages, tools, and system prompt
+- Your prompt is appended as a **suffix** after the inherited context. Never treat it as a new system prompt — a leading system rewrite would destroy prefix cache across parallel forks
+- Sibling `fork_task` calls in one response run in parallel and share the same cached prefix
+- Only the branch result returns to you; the branch's internal agent loop is discarded
+- Writes are blocked because forks share the parent workspace
+
+HARD LIMIT: combined `task` + `fork_task` calls cannot exceed {n} per response. Do not fork dependent steps. Do not use `fork_task` to edit files.
+</fork_task_system>
+"""
+
+
 def _build_subagent_section(
     max_concurrent: int,
     max_total: int = DEFAULT_MAX_TOTAL_SUBAGENTS_PER_RUN,
@@ -1002,6 +1024,7 @@ def apply_prompt_template(
     mcp_routing_hints_section: str = "",
     user_id: str | None = None,
     skill_names: frozenset[str] | None = None,
+    fork_enabled: bool = False,
 ) -> str:
     # Include subagent section only if enabled (from runtime parameter)
     n = clamp_subagent_concurrency(max_concurrent_subagents)
@@ -1011,6 +1034,9 @@ def apply_prompt_template(
         total = getattr(subagents_config, "max_total_per_run", DEFAULT_MAX_TOTAL_SUBAGENTS_PER_RUN)
     total = clamp_total_subagents_per_run(total)
     subagent_section = _build_subagent_section(n, total, app_config=app_config) if subagent_enabled else ""
+    fork_section = _build_fork_task_section(n) if fork_enabled else ""
+    if fork_section:
+        subagent_section = f"{subagent_section}\n{fork_section}" if subagent_section else fork_section
 
     # Add subagent reminder to critical_reminders if enabled
     reminder_benefits = "specialist capability or context isolation" if n == 1 else "real parallel latency, specialist capability, or context isolation"

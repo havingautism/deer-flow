@@ -603,6 +603,7 @@ export interface Translations {
   // Subtasks
   subtasks: {
     subtask: string;
+    fork: string;
     executing: (count: number) => string;
     in_progress: string;
     completed: string;
@@ -620,6 +621,7 @@ export interface Translations {
     unavailable: string;
     unavailableShort: string;
     collecting: string;
+    cache: string;
     note: string;
     presets: {
       off: string;
@@ -637,6 +639,7 @@ export interface Translations {
     stepTotal: string;
     sharedAttribution: string;
     subagent: (description: string) => string;
+    fork: (description: string) => string;
     startTodo: (content: string) => string;
     completeTodo: (content: string) => string;
     updateTodo: (content: string) => string;

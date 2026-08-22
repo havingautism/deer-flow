@@ -98,3 +98,12 @@ def test_bash_descriptions_require_benefit_beyond_routine_commands(monkeypatch) 
     assert policy in task_tool.description
     assert policy in BASH_AGENT_CONFIG.description
     assert "Execute commands one at a time when they depend on each other" in BASH_AGENT_CONFIG.system_prompt
+
+
+def test_fork_task_prompt_describes_state_inheritance(monkeypatch) -> None:
+    section = prompt_module._build_fork_task_section(3)
+    assert "not a subagent" in section
+    assert "suffix" in section
+    assert "prefix" in section
+    assert "Use `task` when" in section
+    assert "Use `fork_task` when" in section

@@ -189,7 +189,7 @@ export const zhCN: Translations = {
     proModeDescription: "思考、计划再执行，获得更精准的结果，可能需要更多时间",
     ultraMode: "Ultra",
     ultraModeDescription:
-      "继承自 Pro 模式，可调用子代理分工协作，适合复杂多步骤任务，能力最强",
+      "继承自 Pro 模式，开启子代理和并行任务，适合复杂多步骤任务，能力最强",
     reasoningEffort: "推理深度",
     reasoningEffortMinimal: "最低",
     reasoningEffortMinimalDescription: "检索 + 直接输出",
@@ -697,6 +697,7 @@ export const zhCN: Translations = {
 
   subtasks: {
     subtask: "子任务",
+    fork: "并行分支",
     executing: (count: number) =>
       `${count > 1 ? "并行" : ""}执行 ${count} 个子任务`,
     in_progress: "子任务运行中",
@@ -716,6 +717,7 @@ export const zhCN: Translations = {
       "暂无 Token 用量。只有模型成功返回且供应商提供 usage_metadata 时才会显示。",
     unavailableShort: "未返回用量",
     collecting: "统计中",
+    cache: "缓存",
     note: "顶部总量优先使用后端持久化的线程用量；当当前回复仍在流式返回时，还会叠加可见的进行中用量。每轮和调试用量只来自当前可见消息，可能与平台账单页不完全一致。",
     presets: {
       off: "关闭",
@@ -733,6 +735,7 @@ export const zhCN: Translations = {
     stepTotal: "步骤总计",
     sharedAttribution: "该 token 由此步骤中的多个动作共同消耗",
     subagent: (description: string) => `子任务：${description}`,
+    fork: (description: string) => `并行分支：${description}`,
     startTodo: (content: string) => `开始 To-do：${content}`,
     completeTodo: (content: string) => `完成 To-do：${content}`,
     updateTodo: (content: string) => `更新 To-do：${content}`,

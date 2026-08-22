@@ -92,6 +92,10 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
         """Queue conversation for memory update after agent completes."""
+        from deerflow.forks.runtime import is_fork_runtime
+
+        if is_fork_runtime(runtime):
+            return None
         add_args = self._resolve_add_args(state, runtime)
         if add_args is None:
             return None
@@ -112,6 +116,10 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
     @override
     async def aafter_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
         """Use the manager's async boundary on LangGraph's async execution path."""
+        from deerflow.forks.runtime import is_fork_runtime
+
+        if is_fork_runtime(runtime):
+            return None
         add_args = self._resolve_add_args(state, runtime)
         if add_args is None:
             return None

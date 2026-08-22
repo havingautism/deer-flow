@@ -104,7 +104,7 @@ def extract_delegations(messages: list[AnyMessage]) -> list[DelegationEntry]:
         if not isinstance(message, AIMessage):
             continue
         for tool_call in message.tool_calls or []:
-            if _tool_call_name(tool_call) != "task":
+            if _tool_call_name(tool_call) not in {"task", "fork_task"}:
                 continue
             tool_call_id = _tool_call_id(tool_call)
             if tool_call_id is None:
@@ -113,10 +113,11 @@ def extract_delegations(messages: list[AnyMessage]) -> list[DelegationEntry]:
             description = str(args.get("description") or args.get("prompt") or "")[:_DESCRIPTION_CAP]
             if tool_call_id not in entries_by_id:
                 order.append(tool_call_id)
+            tool_name = _tool_call_name(tool_call)
             entries_by_id[tool_call_id] = {
                 "id": tool_call_id,
                 "description": description,
-                "subagent_type": str(args.get("subagent_type") or ""),
+                "subagent_type": "fork" if tool_name == "fork_task" else str(args.get("subagent_type") or ""),
                 "status": "in_progress",
                 "created_at": now,
             }

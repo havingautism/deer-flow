@@ -19,6 +19,8 @@ consumers read the structured facts carried inside
   by this delegated run.
 - ``subagent_token_usage`` (optional): final cumulative ``input_tokens`` /
   ``output_tokens`` / ``total_tokens`` snapshot when the provider reported it.
+  ``cache_read_tokens`` is a sparse extra key — present only when the provider
+  reported prompt-cache hits.
 
 The shared fixture at ``contracts/subagent_status_contract.json`` pins
 the enum values across Python and TypeScript.
@@ -180,7 +182,9 @@ def normalize_token_usage(value: Any) -> dict[str, int] | None:
     prevents the two from drifting (e.g. one later accepting an extra token
     field the other rejects, silently dropping usage on one path). Requires
     non-negative ``int`` values for all three keys — ``bool`` is rejected — and
-    returns ``None`` for any non-mapping or malformed input.
+    returns ``None`` for any non-mapping or malformed required input.
+    ``cache_read_tokens`` is additive and sparse: a valid positive int is kept,
+    zero/absent/malformed cache values are omitted without rejecting the rest.
     """
     if not isinstance(value, Mapping):
         return None
@@ -190,6 +194,9 @@ def normalize_token_usage(value: Any) -> dict[str, int] | None:
         if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
             return None
         normalized[key] = amount
+    cache_read = value.get("cache_read_tokens")
+    if not isinstance(cache_read, bool) and isinstance(cache_read, int) and cache_read > 0:
+        normalized["cache_read_tokens"] = cache_read
     return normalized
 
 

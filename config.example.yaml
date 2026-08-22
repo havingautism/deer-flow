@@ -1433,6 +1433,13 @@ sandbox:
 #   # `max_total_subagents`, clamped to the same 1-50 range.
 #   max_total_per_run: 6
 #
+# Forked task execution (`fork_task`) is a separate primitive from subagents.
+# It inherits the lead agent's current ThreadState and appends only a suffix
+# instruction so sibling forks can reuse prefix/KV cache. Runtime flag:
+# `fork_enabled` (defaults to `subagent_enabled`). Combined `task` + `fork_task`
+# calls share `max_concurrent_subagents`. Writes are blocked on the branch
+# because the workspace is shared. See backend/docs/fork_task.md.
+#
 #   # Per-run token ceiling for subagents (#3875 Phase 2). A backstop against a
 #   # subagent that burns tokens on trivial work. At the hard-stop threshold the
 #   # in-flight turn is capped (tool calls stripped, finish_reason forced to

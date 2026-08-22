@@ -241,6 +241,18 @@ def test_subagent_injects_task_tool(mock_create_agent):
     assert "task" in tool_names
 
 
+@patch("deerflow.agents.factory.create_agent")
+def test_fork_injects_fork_task_tool(mock_create_agent):
+    mock_create_agent.return_value = MagicMock()
+    feat = RuntimeFeatures(fork=True, sandbox=False)
+
+    create_deerflow_agent(_make_mock_model(), features=feat)
+
+    call_kwargs = mock_create_agent.call_args[1]
+    tool_names = [t.name for t in call_kwargs["tools"]]
+    assert "fork_task" in tool_names
+
+
 # ---------------------------------------------------------------------------
 # 9. Middleware ordering — ClarificationMiddleware always last
 # ---------------------------------------------------------------------------
@@ -266,6 +278,7 @@ def test_agent_features_defaults():
     assert f.memory is False
     assert f.summarization is False
     assert f.subagent is False
+    assert f.fork is False
     assert f.vision is False
     assert f.auto_title is False
     assert f.guardrail is False

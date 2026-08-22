@@ -497,6 +497,8 @@ class RunJournal(BaseCallbackHandler):
 
                     if caller.startswith("subagent:"):
                         self._subagent_tokens += total_tk
+                    elif caller.startswith("fork:"):
+                        pass
                     elif caller.startswith("middleware:"):
                         self._middleware_tokens += total_tk
                     else:
@@ -696,12 +698,13 @@ class RunJournal(BaseCallbackHandler):
             logger.warning("Journal flush task failed: %s", exc)
 
     def _identify_caller(self, tags: list[str] | None) -> str:
-        _tags = tags or []
-        for tag in _tags:
-            if isinstance(tag, str) and (tag.startswith("subagent:") or tag.startswith("middleware:") or tag == "lead_agent"):
-                return tag
+        _tags = [tag for tag in (tags or []) if isinstance(tag, str)]
+        for prefix in ("subagent:", "middleware:", "fork:"):
+            for tag in _tags:
+                if tag.startswith(prefix):
+                    return tag
         # Default to lead_agent: the main agent graph does not inject
-        # callback tags, while subagents and middleware explicitly tag
+        # callback tags, while subagents, forks, and middleware explicitly tag
         # themselves.
         return "lead_agent"
 
@@ -793,6 +796,8 @@ class RunJournal(BaseCallbackHandler):
             caller = str(record.get("caller", ""))
             if caller.startswith("subagent:"):
                 self._subagent_tokens += total_tk
+            elif caller.startswith("fork:"):
+                pass
             elif caller.startswith("middleware:"):
                 self._middleware_tokens += total_tk
             else:

@@ -279,6 +279,38 @@ class TestTokenUsageMiddleware:
             "total_tokens": 42,
         }
 
+    def test_does_not_merge_fork_task_usage_into_lead_message(self):
+        """Fork usage stays on the ToolMessage so the original lead turn total is unchanged."""
+        middleware = TokenUsageMiddleware()
+        dispatch = AIMessage(
+            content="",
+            tool_calls=[{"id": "fork:1", "name": "fork_task", "args": {"prompt": "try A"}}],
+            usage_metadata={"input_tokens": 8, "output_tokens": 2, "total_tokens": 10},
+        )
+        messages = [
+            dispatch,
+            ToolMessage(
+                content="Fork Succeeded. Result: A",
+                tool_call_id="fork:1",
+                name="fork_task",
+                additional_kwargs={
+                    SUBAGENT_TOKEN_USAGE_KEY: {
+                        "input_tokens": 100,
+                        "output_tokens": 20,
+                        "total_tokens": 120,
+                        "cache_read_tokens": 80,
+                    }
+                },
+            ),
+            AIMessage(content="done"),
+        ]
+
+        result = middleware.after_model({"messages": messages}, _make_runtime())
+
+        usage_updates = [message for message in (result or {}).get("messages", []) if getattr(message, "usage_metadata", None)]
+        assert usage_updates == []
+        assert dispatch.usage_metadata == {"input_tokens": 8, "output_tokens": 2, "total_tokens": 10}
+
     def test_reused_tool_call_id_keeps_usage_scoped_to_each_run_history(self):
         middleware = TokenUsageMiddleware()
         tool_call_id = "reused-provider-tool-call-id"

@@ -31,6 +31,7 @@ from deerflow.subagents.status_contract import (
     format_subagent_result_message,
     make_subagent_additional_kwargs,
 )
+from deerflow.subagents.token_collector import summarize_token_usage_records
 from deerflow.tools.types import Runtime
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, get_current_trace_id, normalize_trace_id
 from deerflow.utils.custom_events import aemit_custom_event
@@ -130,13 +131,7 @@ def _find_usage_recorder(runtime: Any) -> Any | None:
 
 def _summarize_usage(records: list[dict] | None) -> dict | None:
     """Summarize token usage records into a compact dict for SSE events."""
-    if not records:
-        return None
-    return {
-        "input_tokens": sum(r.get("input_tokens", 0) or 0 for r in records),
-        "output_tokens": sum(r.get("output_tokens", 0) or 0 for r in records),
-        "total_tokens": sum(r.get("total_tokens", 0) or 0 for r in records),
-    }
+    return summarize_token_usage_records(records)
 
 
 def _report_subagent_usage(runtime: Any, result: Any) -> None:

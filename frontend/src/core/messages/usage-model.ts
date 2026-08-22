@@ -240,6 +240,9 @@ function describeAttributionAction(
         ? t.tokenUsage.removeTodo(action.content)
         : t.toolCalls.writeTodos;
     case "subagent":
+      if (action.subagent_type === "fork") {
+        return t.tokenUsage.fork(action.description ?? t.subtasks.fork);
+      }
       return t.tokenUsage.subagent(action.description ?? t.subtasks.subtask);
     case "search":
       if (action.query) {
@@ -270,6 +273,14 @@ function describeToolCall(
   },
   t: Translations,
 ): string {
+  if (toolCall.name === "fork_task") {
+    const description =
+      typeof toolCall.args.prompt === "string" && toolCall.args.prompt.trim()
+        ? toolCall.args.prompt
+        : t.subtasks.fork;
+    return t.tokenUsage.fork(description);
+  }
+
   if (toolCall.name === "task") {
     const description =
       typeof toolCall.args.description === "string"

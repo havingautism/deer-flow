@@ -35,7 +35,7 @@ class ToolProgressConfig(BaseModel):
         description="Minimum unique word count to apply Jaccard check; shorter content skips near-duplicate detection entirely",
     )
     exempt_tools: set[str] = Field(
-        default_factory=lambda: {"ask_clarification", "write_todos", "present_files", "task"},
+        default_factory=lambda: {"ask_clarification", "write_todos", "present_files", "task", "fork_task"},
         description="Tool names excluded from progress tracking",
     )
     max_tracked_threads: int = Field(

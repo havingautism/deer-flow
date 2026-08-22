@@ -550,14 +550,20 @@ def build_middlewares(
 
     middlewares.append(SystemMessageCoalescingMiddleware())
 
-    # Add SubagentLimitMiddleware to truncate excess parallel task calls
+    # Add SubagentLimitMiddleware to truncate excess parallel task/fork calls
     subagent_enabled = cfg.get("subagent_enabled", False)
+    fork_enabled = cfg.get("fork_enabled", subagent_enabled)
     effective_max_subagents_per_run: int | None = None
-    if subagent_enabled:
+    if subagent_enabled or fork_enabled:
         max_concurrent_subagents = cfg.get("max_concurrent_subagents", 3)
         max_total_subagents = cfg.get("max_total_subagents", _default_max_total_subagents(resolved_app_config))
         effective_max_subagents_per_run = max_total_subagents
         middlewares.append(SubagentLimitMiddleware(max_concurrent=max_concurrent_subagents, max_total=max_total_subagents))
+    if fork_enabled:
+        from deerflow.forks import ForkExecutionGuardMiddleware, ForkHostMiddleware
+
+        middlewares.append(ForkHostMiddleware())
+        middlewares.append(ForkExecutionGuardMiddleware())
 
     # LoopDetectionMiddleware — detect and break repetitive tool call loops
     loop_detection_config = resolved_app_config.loop_detection
@@ -687,6 +693,16 @@ def make_lead_agent(config: RunnableConfig):
     return _make_lead_agent(config, app_config=runtime_app_config)
 
 
+def _attach_fork_host_graph(agent, middlewares):
+    """Bind the compiled lead graph onto ForkHostMiddleware after create_agent."""
+    from deerflow.forks import ForkHostMiddleware
+
+    for middleware in middlewares:
+        if isinstance(middleware, ForkHostMiddleware):
+            middleware.graph = agent
+    return agent
+
+
 def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
     # Lazy import to avoid circular dependency
     from deerflow.tools import get_available_tools
@@ -710,6 +726,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
     requested_model_name: str | None = cfg.get("model_name") or cfg.get("model")
     is_plan_mode = cfg.get("is_plan_mode", False)
     subagent_enabled = cfg.get("subagent_enabled", False)
+    fork_enabled = cfg.get("fork_enabled", subagent_enabled)
     max_concurrent_subagents = cfg.get("max_concurrent_subagents", 3)
     max_total_subagents = cfg.get("max_total_subagents", _default_max_total_subagents(resolved_app_config))
     is_bootstrap = cfg.get("is_bootstrap", False)
@@ -750,13 +767,14 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
         thinking_enabled = False
 
     logger.info(
-        "Create Agent(%s) -> thinking_enabled: %s, reasoning_effort: %s, model_name: %s, is_plan_mode: %s, subagent_enabled: %s, max_concurrent_subagents: %s, max_total_subagents: %s",
+        "Create Agent(%s) -> thinking_enabled: %s, reasoning_effort: %s, model_name: %s, is_plan_mode: %s, subagent_enabled: %s, fork_enabled: %s, max_concurrent_subagents: %s, max_total_subagents: %s",
         agent_name or "default",
         thinking_enabled,
         reasoning_effort,
         model_name,
         is_plan_mode,
         subagent_enabled,
+        fork_enabled,
         max_concurrent_subagents,
         max_total_subagents,
     )
@@ -810,7 +828,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
             enabled=skill_search_enabled,
             container_base_path=container_base_path,
         )
-        raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, app_config=resolved_app_config) + [setup_agent]
+        raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, fork_enabled=fork_enabled, app_config=resolved_app_config) + [setup_agent]
         configured_tools = raw_tools
         if non_interactive:
             configured_tools = [tool for tool in configured_tools if tool.name not in _NON_INTERACTIVE_DISABLED_TOOL_NAMES]
@@ -834,34 +852,39 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
             setup,
             top_k=resolved_app_config.tool_search.auto_promote_top_k,
         )
-        return create_agent(
-            model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False),
-            tools=final_tools,
-            middleware=normalize_middleware_state_schemas(
-                build_middlewares(
-                    config,
-                    model_name=model_name,
-                    agent_name=agent_name,
-                    available_skills=set(_BOOTSTRAP_SKILL_NAMES),
-                    app_config=resolved_app_config,
-                    deferred_setup=setup,
-                    mcp_routing_middleware=mcp_routing_middleware,
-                    user_id=resolved_user_id,
-                    authorization_provider=_authz_provider,
-                ),
-                mode,
-            ),
-            system_prompt=apply_prompt_template(
-                subagent_enabled=subagent_enabled,
-                max_concurrent_subagents=max_concurrent_subagents,
-                max_total_subagents=max_total_subagents,
+        bootstrap_middlewares = normalize_middleware_state_schemas(
+            build_middlewares(
+                config,
+                model_name=model_name,
+                agent_name=agent_name,
                 available_skills=set(_BOOTSTRAP_SKILL_NAMES),
                 app_config=resolved_app_config,
-                deferred_names=setup.deferred_names,
+                deferred_setup=setup,
+                mcp_routing_middleware=mcp_routing_middleware,
                 user_id=resolved_user_id,
-                skill_names=skill_setup.skill_names or None,
+                authorization_provider=_authz_provider,
             ),
-            state_schema=get_thread_state_schema(mode),
+            mode,
+        )
+        return _attach_fork_host_graph(
+            create_agent(
+                model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False),
+                tools=final_tools,
+                middleware=bootstrap_middlewares,
+                system_prompt=apply_prompt_template(
+                    subagent_enabled=subagent_enabled,
+                    max_concurrent_subagents=max_concurrent_subagents,
+                    max_total_subagents=max_total_subagents,
+                    available_skills=set(_BOOTSTRAP_SKILL_NAMES),
+                    app_config=resolved_app_config,
+                    deferred_names=setup.deferred_names,
+                    user_id=resolved_user_id,
+                    skill_names=skill_setup.skill_names or None,
+                    fork_enabled=fork_enabled,
+                ),
+                state_schema=get_thread_state_schema(mode),
+            ),
+            bootstrap_middlewares,
         )
 
     # Custom agents can update their own SOUL.md / config via update_agent.
@@ -891,7 +914,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
     is_webhook_channel = channel_name in _WEBHOOK_CHANNELS
     extra_tools = [update_agent] if agent_name and not is_webhook_channel else []
     # Default lead agent (unchanged behavior)
-    raw_tools = get_available_tools(model_name=model_name, groups=agent_config.tool_groups if agent_config else None, subagent_enabled=subagent_enabled, app_config=resolved_app_config)
+    raw_tools = get_available_tools(model_name=model_name, groups=agent_config.tool_groups if agent_config else None, subagent_enabled=subagent_enabled, fork_enabled=fork_enabled, app_config=resolved_app_config)
     configured_tools = raw_tools + extra_tools
     if non_interactive:
         configured_tools = [tool for tool in configured_tools if tool.name not in _NON_INTERACTIVE_DISABLED_TOOL_NAMES]
@@ -916,34 +939,39 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
         top_k=resolved_app_config.tool_search.auto_promote_top_k,
     )
     mcp_routing_hints_section = get_mcp_routing_hints_prompt_section(authorized_tools, deferred_names=setup.deferred_names)
-    return create_agent(
-        model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, model_overrides=agent_model_overrides),
-        tools=final_tools,
-        middleware=normalize_middleware_state_schemas(
-            build_middlewares(
-                config,
-                model_name=model_name,
-                agent_name=agent_name,
-                available_skills=available_skills,
-                app_config=resolved_app_config,
-                deferred_setup=setup,
-                mcp_routing_middleware=mcp_routing_middleware,
-                user_id=resolved_user_id,
-                authorization_provider=_authz_provider,
-            ),
-            mode,
-        ),
-        system_prompt=apply_prompt_template(
-            subagent_enabled=subagent_enabled,
-            max_concurrent_subagents=max_concurrent_subagents,
-            max_total_subagents=max_total_subagents,
+    lead_middlewares = normalize_middleware_state_schemas(
+        build_middlewares(
+            config,
+            model_name=model_name,
             agent_name=agent_name,
             available_skills=available_skills,
             app_config=resolved_app_config,
-            deferred_names=setup.deferred_names,
-            mcp_routing_hints_section=mcp_routing_hints_section,
+            deferred_setup=setup,
+            mcp_routing_middleware=mcp_routing_middleware,
             user_id=resolved_user_id,
-            skill_names=skill_setup.skill_names or None,
+            authorization_provider=_authz_provider,
         ),
-        state_schema=get_thread_state_schema(mode),
+        mode,
+    )
+    return _attach_fork_host_graph(
+        create_agent(
+            model=create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, model_overrides=agent_model_overrides),
+            tools=final_tools,
+            middleware=lead_middlewares,
+            system_prompt=apply_prompt_template(
+                subagent_enabled=subagent_enabled,
+                max_concurrent_subagents=max_concurrent_subagents,
+                max_total_subagents=max_total_subagents,
+                agent_name=agent_name,
+                available_skills=available_skills,
+                app_config=resolved_app_config,
+                deferred_names=setup.deferred_names,
+                mcp_routing_hints_section=mcp_routing_hints_section,
+                user_id=resolved_user_id,
+                skill_names=skill_setup.skill_names or None,
+                fork_enabled=fork_enabled,
+            ),
+            state_schema=get_thread_state_schema(mode),
+        ),
+        lead_middlewares,
     )
