@@ -7,9 +7,9 @@ Clone is classified, not a blind deepcopy:
 - **Branch-local snapshot**: ``todos``, ``artifacts``, ``viewed_images``,
   ``promoted``, ``delegations``, ``goal``, ``background_tasks``. Mutations stay
   on the branch and are discarded after the result is extracted.
-- **Shared resources**: sandbox/workspace paths are reused. Write tools are
-  blocked at execution by ``ForkExecutionGuardMiddleware`` so parallel forks
-  cannot race the same files.
+- **Shared resources**: sandbox/workspace paths are reused. File reads and
+  writes run on that shared workspace; same-path mutations serialize through
+  the existing sandbox / read-before-write locks.
 
 Branch-specific instructions MUST be a trailing HumanMessage suffix. Never
 prepend or inject a SystemMessage — ``SystemMessageCoalescingMiddleware``
@@ -82,10 +82,11 @@ def build_fork_instruction_message(prompt: str) -> HumanMessage:
             "<fork-task>\n"
             f"{text}\n"
             "</fork-task>\n"
-            "You are an ephemeral branch of the current agent. Complete only this forked exploration "
-            "using the inherited conversation and tools. Prefer a short final answer; do not start a "
-            "long tool loop. Do not modify workspace files — write_file and str_replace are blocked on "
-            "this branch. Do not call fork_task or task. Return a concise result the parent can merge."
+            "You are an ephemeral branch of the current agent. You inherit this conversation; "
+            "stay continuous with that context and complete only this forked exploration using "
+            "the inherited tools. Prefer a short final answer; do not start a long tool loop. "
+            "You may read and write workspace files. Do not call fork_task or task. "
+            "Return a concise result the parent can merge."
         ),
         additional_kwargs={FORK_INSTRUCTION_KEY: True},
     )

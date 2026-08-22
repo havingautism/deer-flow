@@ -727,12 +727,17 @@ export const enUS: Translations = {
 
   subtasks: {
     subtask: "Subtask",
-    fork: "Fork",
+    fork: "Parallel task",
     executing: (count: number) =>
       `Executing ${count === 1 ? "" : count + " "}subtask${count === 1 ? "" : "s in parallel"}`,
+    executingForks: (count: number) =>
+      `Executing ${count === 1 ? "" : count + " "}parallel task${count === 1 ? "" : "s"}`,
     in_progress: "Running subtask",
     completed: "Subtask completed",
     failed: "Subtask failed",
+    fork_in_progress: "Running parallel task",
+    fork_completed: "Parallel task completed",
+    fork_failed: "Parallel task failed",
   },
 
   // Token Usage
@@ -748,6 +753,8 @@ export const enUS: Translations = {
     unavailableShort: "No usage returned",
     collecting: "Collecting tokens",
     cache: "cache",
+    cacheRate: "Cache rate",
+    unique: "new",
     note: "Header totals use persisted thread usage, plus visible in-flight usage while a run is still streaming. Per-turn and debug usage come from currently visible messages only. Totals may differ from provider billing pages.",
     presets: {
       off: "Off",
@@ -766,7 +773,7 @@ export const enUS: Translations = {
     stepTotal: "Step total",
     sharedAttribution: "Shared across multiple actions in this step",
     subagent: (description: string) => `Subagent: ${description}`,
-    fork: (description: string) => `Fork: ${description}`,
+    fork: (description: string) => `Parallel task: ${description}`,
     startTodo: (content: string) => `Start To-do: ${content}`,
     completeTodo: (content: string) => `Complete To-do: ${content}`,
     updateTodo: (content: string) => `Update To-do: ${content}`,

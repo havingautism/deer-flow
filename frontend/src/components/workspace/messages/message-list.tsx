@@ -420,19 +420,20 @@ export function MessageList({
     null,
   );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const hasActiveAssistantText = useMemo(() => {
-    let lastHumanIndex = -1;
-    for (let i = groupedMessages.length - 1; i >= 0; i--) {
-      if (groupedMessages[i]?.type === "human") {
-        lastHumanIndex = i;
-        break;
+  const lastHumanGroupIndex = useMemo(() => {
+    for (let index = groupedMessages.length - 1; index >= 0; index--) {
+      if (groupedMessages[index]?.type === "human") {
+        return index;
       }
     }
-    if (lastHumanIndex === -1) return false;
-    return groupedMessages
-      .slice(lastHumanIndex)
-      .some((g) => g.type === "assistant");
+    return -1;
   }, [groupedMessages]);
+  const hasActiveAssistantText = useMemo(() => {
+    if (lastHumanGroupIndex === -1) return false;
+    return groupedMessages
+      .slice(lastHumanGroupIndex)
+      .some((group) => group.type === "assistant");
+  }, [groupedMessages, lastHumanGroupIndex]);
   const updateSubtask = useUpdateSubtask();
   const lastGroupIndex = groupedMessages.length - 1;
   const previousTurnUsageStateRef = useRef<AssistantTurnUsageState | undefined>(
@@ -1028,6 +1029,12 @@ export function MessageList({
                 turnUsageMessagesByGroupIndex[groupIndex];
               const groupIsLoading =
                 thread.isLoading && groupIndex === lastGroupIndex;
+              // The lead answer opens a later assistant group, so this card
+              // group is no longer last — but it is still the current turn.
+              // Pending cards must stay in progress until that turn finishes,
+              // otherwise they flip to failed as soon as the answer appears.
+              const pendingTaskLoading =
+                thread.isLoading && groupIndex > lastHumanGroupIndex;
 
               if (group.type === "human" || group.type === "assistant") {
                 return withRunDuration(
@@ -1229,69 +1236,83 @@ export function MessageList({
                 );
               } else if (group.type === "assistant:subagent") {
                 const tasks = new Set<Subtask>();
+                const taskIds = new Set<string>();
                 for (const message of group.messages) {
-                  if (message.type === "ai") {
-                    for (const toolCall of message.tool_calls ?? []) {
-                      if (isParallelTaskTool(toolCall.name)) {
-                        const taskId = toolCall.id;
-                        if (!taskId) {
-                          continue;
-                        }
-                        const status = derivePendingSubtaskStatus(
-                          taskId,
-                          group.messages,
-                          groupIsLoading,
-                        );
-                        const prompt =
-                          typeof toolCall.args.prompt === "string"
-                            ? toolCall.args.prompt
-                            : "";
-                        const description =
-                          typeof toolCall.args.description === "string" &&
-                          toolCall.args.description.trim()
-                            ? toolCall.args.description
-                            : prompt.trim() ||
-                              (toolCall.name === "fork_task"
-                                ? t.subtasks.fork
-                                : t.subtasks.subtask);
-                        const task: Subtask = {
-                          id: taskId,
-                          subagent_type:
-                            toolCall.name === "fork_task"
-                              ? "fork"
-                              : String(toolCall.args.subagent_type ?? ""),
-                          description,
-                          prompt,
-                          status,
-                          ...(status === "failed"
-                            ? { error: t.subtasks.failed }
-                            : {}),
-                        };
-                        updateSubtask(task);
-                        tasks.add(task);
+                  if (message.type !== "ai") {
+                    continue;
+                  }
+                  for (const toolCall of message.tool_calls ?? []) {
+                    if (isParallelTaskTool(toolCall.name)) {
+                      const taskId = toolCall.id;
+                      if (!taskId) {
+                        continue;
                       }
-                    }
-                  } else if (message.type === "tool") {
-                    const taskId = message.tool_call_id;
-                    if (taskId) {
-                      const parsed = parseSubtaskResult(
-                        extractTextFromMessage(message),
-                        message.additional_kwargs,
+                      const status = derivePendingSubtaskStatus(
+                        taskId,
+                        messages,
+                        pendingTaskLoading,
                       );
-                      updateSubtask({ id: taskId, ...parsed });
+                      const prompt =
+                        typeof toolCall.args.prompt === "string"
+                          ? toolCall.args.prompt
+                          : "";
+                      const description =
+                        typeof toolCall.args.description === "string" &&
+                        toolCall.args.description.trim()
+                          ? toolCall.args.description
+                          : prompt.trim() ||
+                            (toolCall.name === "fork_task"
+                              ? t.subtasks.fork
+                              : t.subtasks.subtask);
+                      const task: Subtask = {
+                        id: taskId,
+                        subagent_type:
+                          toolCall.name === "fork_task"
+                            ? "fork"
+                            : String(toolCall.args.subagent_type ?? ""),
+                        description,
+                        prompt,
+                        status,
+                      };
+                      updateSubtask(task);
+                      taskIds.add(taskId);
+                      tasks.add(task);
                     }
                   }
+                }
+                // Command-returned ToolMessages can land after the lead
+                // answer, in a later group. Read the whole thread so a
+                // finished fork/task is not left as pending-failed.
+                for (const message of messages) {
+                  if (message.type !== "tool") {
+                    continue;
+                  }
+                  const taskId = message.tool_call_id;
+                  if (!taskId || !taskIds.has(taskId)) {
+                    continue;
+                  }
+                  const parsed = parseSubtaskResult(
+                    extractTextFromMessage(message),
+                    message.additional_kwargs,
+                  );
+                  updateSubtask({ id: taskId, ...parsed });
                 }
 
                 const results: React.ReactNode[] = [];
                 const subagentDebugMessageIds: string[] = [];
                 if (tasks.size > 0) {
+                  const taskList = [...tasks];
+                  const allForks = taskList.every(
+                    (item) => item.subagent_type === "fork",
+                  );
                   results.push(
                     <div
                       key="subtask-count"
                       className="text-muted-foreground pt-2 text-sm font-normal"
                     >
-                      {t.subtasks.executing(tasks.size)}
+                      {allForks
+                        ? t.subtasks.executingForks(tasks.size)
+                        : t.subtasks.executing(tasks.size)}
                     </div>,
                   );
                 }
@@ -1314,12 +1335,12 @@ export function MessageList({
                   } else if (message.id) {
                     subagentDebugMessageIds.push(message.id);
                   }
-                  const taskIds = message.tool_calls?.flatMap((toolCall) =>
+                  const cardTaskIds = message.tool_calls?.flatMap((toolCall) =>
                     isParallelTaskTool(toolCall.name) && toolCall.id
                       ? [toolCall.id]
                       : [],
                   );
-                  for (const taskId of taskIds ?? []) {
+                  for (const taskId of cardTaskIds ?? []) {
                     results.push(
                       <SubtaskCard
                         key={"task-group-" + taskId}

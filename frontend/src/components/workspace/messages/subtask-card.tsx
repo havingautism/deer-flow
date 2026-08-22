@@ -18,7 +18,11 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/core/i18n/hooks";
-import { formatTokenCount } from "@/core/messages/usage";
+import {
+  formatCacheHitRate,
+  formatTokenCount,
+  uniqueTokenCount,
+} from "@/core/messages/usage";
 import { useModels } from "@/core/models/hooks";
 import {
   streamdownPluginsWithoutRawHtml,
@@ -75,9 +79,25 @@ export function SubtaskCard({
   const task = useSubtask(taskId)!;
   const { tokenUsageEnabled } = useModels();
   const updateSubtask = useUpdateSubtask();
+  const isFork = task.subagent_type === "fork";
+  const statusLabel = isFork
+    ? {
+        in_progress: t.subtasks.fork_in_progress,
+        completed: t.subtasks.fork_completed,
+        failed: t.subtasks.fork_failed,
+      }[task.status]
+    : t.subtasks[task.status];
   const cacheLabel =
     tokenUsageEnabled && task.usage?.cacheReadTokens
       ? `${formatTokenCount(task.usage.cacheReadTokens)} ${t.tokenUsage.cache}`
+      : undefined;
+  const uniqueLabel =
+    tokenUsageEnabled && task.usage?.cacheReadTokens
+      ? `${formatTokenCount(uniqueTokenCount(task.usage))} ${t.tokenUsage.unique}`
+      : undefined;
+  const cacheRate =
+    tokenUsageEnabled && task.usage
+      ? formatCacheHitRate(task.usage)
       : undefined;
   const tokenTotal =
     tokenUsageEnabled && task.usage
@@ -148,9 +168,7 @@ export function SubtaskCard({
                 icon={<ClipboardListIcon />}
               ></ChainOfThoughtStep>
               <div className="text-muted-foreground flex shrink-0 items-center gap-1.5">
-                <span className="text-xs font-normal">
-                  {t.subtasks[task.status]}
-                </span>
+                <span className="text-xs font-normal">{statusLabel}</span>
                 {statusIcon}
                 <ChevronUp
                   className={cn(
@@ -195,7 +213,7 @@ export function SubtaskCard({
                 key={`${step.message_index}-${i}`}
                 label={
                   step.kind === "tool" ? (
-                    (step.tool_name ?? t.subtasks[task.status])
+                    (step.tool_name ?? statusLabel)
                   ) : (
                     <div className="text-muted-foreground line-clamp-3 text-sm">
                       <MarkdownContent content={step.text} isLoading={false} />
@@ -209,7 +227,11 @@ export function SubtaskCard({
           {task.status === "completed" && (
             <>
               <ChainOfThoughtStep
-                label={t.subtasks.completed}
+                label={
+                  isFork
+                    ? t.subtasks.fork_completed
+                    : t.subtasks.completed
+                }
                 icon={<CheckCircleIcon className="text-muted-foreground size-4" />}
               ></ChainOfThoughtStep>
               <ChainOfThoughtStep
@@ -233,18 +255,33 @@ export function SubtaskCard({
             <div className="mt-3 flex justify-end">
               <div
                 className="text-muted-foreground bg-background/70 flex h-auto items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-normal"
-                title={
-                  cacheLabel
-                    ? `${t.tokenUsage.label} ${tokenTotal} · ${cacheLabel}`
-                    : `${t.tokenUsage.label} ${tokenTotal}`
-                }
+                title={[
+                  `${t.tokenUsage.label} ${tokenTotal}`,
+                  uniqueLabel,
+                  cacheLabel,
+                  cacheRate
+                    ? `${t.tokenUsage.cacheRate} ${cacheRate}`
+                    : undefined,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               >
                 <CoinsIcon size={14} />
                 <span>{t.tokenUsage.label}</span>
                 <span className="font-mono">{tokenTotal}</span>
+                {uniqueLabel && (
+                  <span className="text-muted-foreground/80 border-l pl-1.5 font-mono">
+                    {uniqueLabel}
+                  </span>
+                )}
                 {cacheLabel && (
                   <span className="text-muted-foreground/80 border-l pl-1.5 font-mono">
                     {cacheLabel}
+                  </span>
+                )}
+                {cacheRate && (
+                  <span className="text-muted-foreground/80 border-l pl-1.5 font-mono">
+                    {cacheRate}
                   </span>
                 )}
               </div>

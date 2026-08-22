@@ -697,12 +697,17 @@ export const zhCN: Translations = {
 
   subtasks: {
     subtask: "子任务",
-    fork: "并行分支",
+    fork: "并行任务",
     executing: (count: number) =>
       `${count > 1 ? "并行" : ""}执行 ${count} 个子任务`,
+    executingForks: (count: number) =>
+      `${count > 1 ? "并行" : ""}执行 ${count} 个并行任务`,
     in_progress: "子任务运行中",
     completed: "子任务已完成",
     failed: "子任务失败",
+    fork_in_progress: "并行任务运行中",
+    fork_completed: "并行任务已完成",
+    fork_failed: "并行任务失败",
   },
 
   // Token Usage
@@ -718,6 +723,8 @@ export const zhCN: Translations = {
     unavailableShort: "未返回用量",
     collecting: "统计中",
     cache: "缓存",
+    cacheRate: "缓存率",
+    unique: "新增",
     note: "顶部总量优先使用后端持久化的线程用量；当当前回复仍在流式返回时，还会叠加可见的进行中用量。每轮和调试用量只来自当前可见消息，可能与平台账单页不完全一致。",
     presets: {
       off: "关闭",
@@ -735,7 +742,7 @@ export const zhCN: Translations = {
     stepTotal: "步骤总计",
     sharedAttribution: "该 token 由此步骤中的多个动作共同消耗",
     subagent: (description: string) => `子任务：${description}`,
-    fork: (description: string) => `并行分支：${description}`,
+    fork: (description: string) => `并行任务：${description}`,
     startTodo: (content: string) => `开始 To-do：${content}`,
     completeTodo: (content: string) => `完成 To-do：${content}`,
     updateTodo: (content: string) => `更新 To-do：${content}`,

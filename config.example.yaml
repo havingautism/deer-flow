@@ -1437,8 +1437,8 @@ sandbox:
 # It inherits the lead agent's current ThreadState and appends only a suffix
 # instruction so sibling forks can reuse prefix/KV cache. Runtime flag:
 # `fork_enabled` (defaults to `subagent_enabled`). Combined `task` + `fork_task`
-# calls share `max_concurrent_subagents`. Writes are blocked on the branch
-# because the workspace is shared. See backend/docs/fork_task.md.
+# calls share `max_concurrent_subagents`. File reads and writes are allowed on
+# the shared parent workspace. See backend/docs/fork_task.md.
 #
 #   # Per-run token ceiling for subagents (#3875 Phase 2). A backstop against a
 #   # subagent that burns tokens on trivial work. At the hard-stop threshold the

@@ -1396,4 +1396,41 @@ describe("orphan tool messages", () => {
       "assistant:subagent",
     ]);
   });
+
+  test("attaches a late fork_task ToolMessage to the following assistant group", () => {
+    const groups = getMessageGroups([
+      { id: "human-1", type: "human", content: "compare both" },
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          { id: "fork-a", name: "fork_task", args: { prompt: "try A" } },
+        ],
+      },
+      {
+        id: "ai-2",
+        type: "ai",
+        content: "here is the answer",
+      },
+      {
+        id: "tool-1",
+        type: "tool",
+        name: "fork_task",
+        tool_call_id: "fork-a",
+        content: "Fork Succeeded. Result: A",
+      },
+    ] as Message[]);
+    expect(groups.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:subagent",
+      "assistant",
+    ]);
+    expect(groups[1]?.messages.some((message) => message.type === "tool")).toBe(
+      false,
+    );
+    expect(groups[2]?.messages.some((message) => message.type === "tool")).toBe(
+      true,
+    );
+  });
 });

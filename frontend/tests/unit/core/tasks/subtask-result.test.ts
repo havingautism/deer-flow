@@ -76,6 +76,36 @@ describe("parseSubtaskResult", () => {
     });
   });
 
+  it("uses legacy fork result text when structured metadata is absent", () => {
+    expect(
+      parseSubtaskResult("Fork Succeeded. Result: Option A is safer."),
+    ).toEqual({
+      status: "completed",
+      result: "Option A is safer.",
+    });
+
+    expect(
+      parseSubtaskResult(
+        "Fork Succeeded (capped: turn_capped). Result: 12345 × 6789 = 83810205",
+      ),
+    ).toEqual({
+      status: "completed",
+      result: "12345 × 6789 = 83810205",
+    });
+
+    expect(
+      parseSubtaskResult("Fork failed (capped: turn_capped): no answer"),
+    ).toEqual({
+      status: "failed",
+      error: "Fork failed (capped: turn_capped): no answer",
+    });
+
+    expect(parseSubtaskResult("Fork failed: Nested fork_task is not allowed.")).toEqual({
+      status: "failed",
+      error: "Fork failed: Nested fork_task is not allowed.",
+    });
+  });
+
   it("keeps unknown content-only task results in progress", () => {
     const parsed = parseSubtaskResult("partial streaming chunk");
 
@@ -129,6 +159,18 @@ describe("derivePendingSubtaskStatus", () => {
     ] as Message[];
 
     expect(derivePendingSubtaskStatus("call_task_1", messages, false)).toBe(
+      "in_progress",
+    );
+  });
+
+  it("treats a matching ToolMessage later in the thread as still in progress", () => {
+    const messages = [
+      { type: "ai" },
+      { type: "ai", content: "final answer" },
+      { type: "tool", tool_call_id: "call_fork_1", name: "fork_task" },
+    ] as Message[];
+
+    expect(derivePendingSubtaskStatus("call_fork_1", messages, false)).toBe(
       "in_progress",
     );
   });

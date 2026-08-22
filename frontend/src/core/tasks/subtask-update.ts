@@ -25,12 +25,25 @@ export function computeNextSubtask(
 ): { next: Subtask; becameTerminal: boolean; changed: boolean } {
   const previousStatus = previous?.status;
 
-  // MessageList writes the pending task tool-call state before parsing the
-  // matching ToolMessage in the same render. Keep terminal results stable
-  // across the next render so the refresh notification does not loop.
+  // MessageList writes the pending tool-call card (prompt + subagent_type)
+  // before parsing the matching ToolMessage in the same render, and again on
+  // every later render. That pending write uses derivePendingSubtaskStatus,
+  // which becomes `failed` once the turn is no longer the loading group —
+  // even after a successful ToolMessage already marked the card completed.
+  const isPendingCardRewrite =
+    Object.prototype.hasOwnProperty.call(task, "prompt") &&
+    Object.prototype.hasOwnProperty.call(task, "subagent_type");
+
   const next = {
     ...previous,
     ...task,
+    ...(isPendingCardRewrite && isTerminalSubtaskStatus(previousStatus)
+      ? {
+          status: previousStatus,
+          error: previous?.error,
+          result: previous?.result,
+        }
+      : {}),
     ...(task.status === "in_progress" && isTerminalSubtaskStatus(previousStatus)
       ? { status: previousStatus }
       : {}),
@@ -94,7 +107,8 @@ function usageEquals(a: Subtask["usage"], b: Subtask["usage"]): boolean {
   return (
     a.inputTokens === b.inputTokens &&
     a.outputTokens === b.outputTokens &&
-    a.totalTokens === b.totalTokens
+    a.totalTokens === b.totalTokens &&
+    a.cacheReadTokens === b.cacheReadTokens
   );
 }
 

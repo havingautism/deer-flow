@@ -62,29 +62,31 @@ async def fork_task_tool(
     prompt: str,
     tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
-    """Fork the current agent state into an ephemeral branch and explore in parallel.
+    """Fork the current lead-agent state into a parallel related branch.
 
-    This is NOT a subagent. The branch clones the lead agent's current ThreadState
-    (messages, skills, tools, sandbox) and appends only this prompt as a suffix so
-    prefix/KV cache can be reused. Sibling `fork_task` calls in the same response
-    run concurrently.
+    This is NOT the `task` subagent. `task` starts a fresh, context-isolated
+    agent for independent work. `fork_task` clones THIS conversation
+    (messages, tools, files, sandbox) and appends only your prompt as a
+    suffix so related work stays continuous and prefix/KV cache can be reused.
+    Sibling `fork_task` calls in the same response run concurrently.
 
-    Use fork_task when:
-    - The work depends heavily on the current conversation and tool results
-    - Several approaches should be explored against the same context
-    - Preserving prefix cache is desirable
+    Use fork_task when the work is related to the current state AND you can
+    launch two or more sibling forks in this same response:
+    - Compare approaches, inspect two files, or try A/B against the same context
+    - Each branch can finish without the others' results
 
-    Use `task` instead when:
-    - The work is an independent long-horizon job
-    - Only a scoped/fresh context is needed
-    - A specialist subagent prompt or tool set is useful
+    Do NOT use fork_task when:
+    - The job is independent of this conversation — use `task`
+    - One sequential step on the lead agent is enough
+    - You would only launch a single fork (stay on the lead)
+    - Nested agents or sibling-dependent steps are required
 
-    Do NOT use fork_task to edit files. Forks share the parent workspace; writes
-    are blocked. Do not fork dependent steps that need each other's results.
+    Forks share the parent workspace and may read and write files. Prefer
+    different output paths when sibling forks write in parallel.
 
     Args:
-        prompt: The branch-specific instruction. This is appended AFTER the
-            inherited parent context so A/B/C forks share the same prefix.
+        prompt: Branch-specific instruction, appended AFTER the inherited
+            parent context so sibling forks share the same prefix.
             ALWAYS PROVIDE THIS PARAMETER FIRST.
     """
     writer = get_stream_writer()

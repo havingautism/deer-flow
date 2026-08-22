@@ -6,16 +6,20 @@ import copy
 import logging
 from typing import Any
 
-from langchain_core.callbacks import BaseCallbackManager
+from langchain_core.callbacks import AsyncCallbackManager, BaseCallbackManager
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphRecursionError
 
+from deerflow.forks.collector import (
+    ForkTokenCollector,
+    prefer_usage_records,
+    records_from_ai_messages,
+)
 from deerflow.forks.host import get_fork_host_graph
 from deerflow.forks.result import ForkResult
-from deerflow.forks.state import fork_state
+from deerflow.forks.state import fork_state, strip_in_flight_fork_message
 from deerflow.subagents.token_collector import (
-    SubagentTokenCollector,
     model_name_from_usage_records,
     summarize_token_usage_records,
 )
@@ -69,31 +73,60 @@ def extract_branch_result(result_state: Any) -> tuple[str, list[str]]:
     return fallback, receipts
 
 
-def _is_parent_usage_handler(handler: Any) -> bool:
-    """Parent RunJournal must not see fork LLM events.
+def _find_parent_usage_recorder(parent_config: dict[str, Any]) -> Any | None:
+    """Locate the parent RunJournal on the lead agent's callback list."""
+    callbacks = parent_config.get("callbacks")
+    if isinstance(callbacks, BaseCallbackManager):
+        callbacks = callbacks.handlers
+    if not isinstance(callbacks, list):
+        return None
+    for handler in callbacks:
+        if hasattr(handler, "record_external_llm_usage_records"):
+            return handler
+    return None
 
-    Those tokens belong on the fork card. If the journal counted them, they
-    would land in ``lead_agent_tokens`` and mix into the original header total.
+
+def _report_fork_usage(parent_config: dict[str, Any], result: ForkResult) -> None:
+    """Add this branch's collector records to the parent thread total."""
+    records = result.token_usage_records
+    if not records:
+        return
+    recorder = _find_parent_usage_recorder(parent_config)
+    if recorder is None:
+        return
+    try:
+        recorder.record_external_llm_usage_records(records)
+    except Exception:
+        logger.warning("Failed to report fork token usage to parent journal", exc_info=True)
+
+
+def _child_callbacks(parent_callbacks: Any, collector: ForkTokenCollector) -> AsyncCallbackManager:
+    """Give this branch its own callback manager.
+
+    Parallel ``fork_task`` calls share the parent manager. Copying those
+    handlers would let sibling branches observe the same LLM events.
+    Nested model/tool nodes still see *this* collector via
+    ``inheritable_handlers``. Parent ``task`` subagents are unchanged.
     """
-    return getattr(handler, "deerflow_loop_bound", False) is True or hasattr(handler, "record_external_llm_usage_records")
+    del parent_callbacks
+    return AsyncCallbackManager(handlers=[collector], inheritable_handlers=[collector])
 
 
-def _child_callbacks(parent_callbacks: Any, collector: SubagentTokenCollector) -> list[Any]:
-    """Copy non-journal parent handlers and append the per-fork collector."""
-    raw: list[Any]
-    if isinstance(parent_callbacks, BaseCallbackManager):
-        raw = list(parent_callbacks.handlers)
-    elif isinstance(parent_callbacks, list):
-        raw = list(parent_callbacks)
-    elif parent_callbacks is not None:
-        raw = [parent_callbacks]
-    else:
-        raw = []
-    return [handler for handler in raw if not _is_parent_usage_handler(handler)] + [collector]
-
-
-def _stamp_usage(result: ForkResult, collector: SubagentTokenCollector) -> ForkResult:
-    records = collector.snapshot_records()
+def _stamp_usage(
+    result: ForkResult,
+    collector: ForkTokenCollector,
+    *,
+    messages: Any = None,
+    inherited_messages: Any = None,
+) -> ForkResult:
+    records = prefer_usage_records(
+        collector.snapshot_records(),
+        records_from_ai_messages(
+            messages,
+            caller=collector.caller,
+            skip_objects=inherited_messages,
+        ),
+    )
     result.token_usage_records = records
     result.token_usage = summarize_token_usage_records(records)
     result.model_name = model_name_from_usage_records(records)
@@ -168,7 +201,10 @@ class ForkExecutor:
             )
 
         branch_state = fork_state(parent_state, prompt)
-        collector = SubagentTokenCollector(caller=f"fork:{task_id}")
+        inherited_messages = strip_in_flight_fork_message(
+            parent_state.get("messages") if isinstance(parent_state, dict) else None
+        )
+        collector = ForkTokenCollector(caller=f"fork:{task_id}")
         # Do not put checkpoint coordinates in the child config. Passing
         # thread_id/checkpoint_ns starts a new root lineage and can leak child
         # messages into the parent stream (same contract as SubagentExecutor).
@@ -194,7 +230,7 @@ class ForkExecutor:
                 final_state = chunk
         except GraphRecursionError:
             logger.warning("Forked branch %s reached max_turns=%s", task_id, self.max_turns)
-            return _stamp_usage(
+            result = _stamp_usage(
                 _result_from_state(
                     final_state,
                     task_id=task_id,
@@ -202,12 +238,26 @@ class ForkExecutor:
                     turn_capped=True,
                 ),
                 collector,
+                messages=final_state.get("messages") if isinstance(final_state, dict) else None,
+                inherited_messages=inherited_messages,
             )
+            _report_fork_usage(self.parent_config, result)
+            return result
         except Exception as exc:
             logger.exception("Forked branch %s failed", task_id)
-            return _stamp_usage(ForkResult(task_id=task_id, status="failed", error=str(exc)), collector)
+            result = _stamp_usage(
+                ForkResult(task_id=task_id, status="failed", error=str(exc)),
+                collector,
+                inherited_messages=inherited_messages,
+            )
+            _report_fork_usage(self.parent_config, result)
+            return result
 
-        return _stamp_usage(
+        result = _stamp_usage(
             _result_from_state(final_state, task_id=task_id, max_turns=self.max_turns),
             collector,
+            messages=final_state.get("messages") if isinstance(final_state, dict) else None,
+            inherited_messages=inherited_messages,
         )
+        _report_fork_usage(self.parent_config, result)
+        return result

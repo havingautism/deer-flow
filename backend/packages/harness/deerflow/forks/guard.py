@@ -1,4 +1,4 @@
-"""Block nested delegation and shared-workspace writes inside a forked branch."""
+"""Block nested delegation and user interrupts inside a forked branch."""
 
 from __future__ import annotations
 
@@ -14,11 +14,10 @@ from langgraph.types import Command
 from deerflow.agents.middlewares.tool_result_meta import normalize_tool_result
 from deerflow.forks.runtime import is_fork_runtime
 
-# Tool schemas stay on the model (prefix cache). Execution is denied.
+# Tool schemas stay on the model (prefix cache). Nested agents and user
+# interrupts are denied at execution; file reads and writes are allowed.
 FORK_BLOCKED_TOOLS = frozenset(
     {
-        "write_file",
-        "str_replace",
         "fork_task",
         "task",
         "ask_clarification",
@@ -28,7 +27,7 @@ FORK_BLOCKED_TOOLS = frozenset(
     }
 )
 
-_BLOCK_MESSAGE = "Error: {tool_name} is blocked on a forked branch. This branch inherits the parent workspace and must not write files, spawn nested agents, or interrupt the user. Return your findings from read/search tools instead."
+_BLOCK_MESSAGE = "Error: {tool_name} is blocked on a forked branch. This branch inherits the parent workspace and must not spawn nested agents or interrupt the user. Complete the work with the inherited tools and return a concise result."
 
 
 class ForkExecutionGuardMiddleware(AgentMiddleware[AgentState]):

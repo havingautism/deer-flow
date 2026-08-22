@@ -103,7 +103,23 @@ def test_bash_descriptions_require_benefit_beyond_routine_commands(monkeypatch) 
 def test_fork_task_prompt_describes_state_inheritance(monkeypatch) -> None:
     section = prompt_module._build_fork_task_section(3)
     assert "not a subagent" in section
+    assert "isolated subagent" in section
+    assert "Related-task continuity" in section
+    assert "Parallel speed" in section
+    assert "Cache-friendly" in section
     assert "suffix" in section
     assert "prefix" in section
-    assert "Use `task` when" in section
-    assert "Use `fork_task` when" in section
+    assert "two or more independent sibling" in section
+    assert "When NOT to use `fork_task`" in section
+    assert "lone `fork_task`" in section
+    assert "use `task`" in section
+    assert "File reads and writes are allowed" in section
+    assert "Do not use `fork_task` to edit files" not in section
+
+    from deerflow.tools.builtins.fork_task_tool import fork_task_tool
+
+    description = fork_task_tool.description or ""
+    assert "NOT the `task` subagent" in description
+    assert "two or more sibling forks" in description
+    assert "related to the current state" in description
+    assert "may read and write files" in description

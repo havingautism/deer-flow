@@ -158,7 +158,68 @@ export function selectHeaderTokenUsage({
     const pendingUsage = accumulateUsage(pendingMessages);
     return pendingUsage ? addUsage(backendUsage, pendingUsage) : backendUsage;
   }
-  return accumulateUsage(messages);
+  const visible = accumulateUsage(messages);
+  const forks = accumulateForkTaskUsage(messages);
+  if (visible && forks) {
+    return addUsage(visible, forks);
+  }
+  return visible ?? forks;
+}
+
+/**
+ * Sum `fork_task` ToolMessage usage when the backend thread total is missing.
+ *
+ * Parallel-task tokens are not merged into lead `usage_metadata`. They belong
+ * on the card and in the journal-backed header total. This fallback covers
+ * historical threads or local streams where that journal snapshot is absent.
+ */
+export function accumulateForkTaskUsage(messages: Message[]): TokenUsage | null {
+  const cumulative: TokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+  };
+  let hasUsage = false;
+  let cacheReadTokens = 0;
+  const countedIds = new Set<string>();
+
+  for (const message of messages) {
+    if (message.type !== "tool") {
+      continue;
+    }
+    const toolMessage = message as Message & {
+      name?: string;
+      additional_kwargs?: Record<string, unknown>;
+    };
+    if (toolMessage.name !== "fork_task") {
+      continue;
+    }
+    const dedupeId = message.id ?? message.tool_call_id;
+    if (dedupeId) {
+      if (countedIds.has(dedupeId)) {
+        continue;
+      }
+      countedIds.add(dedupeId);
+    }
+    const usage = normalizeTokenUsage(
+      toolMessage.additional_kwargs?.subagent_token_usage,
+    );
+    if (!usage) {
+      continue;
+    }
+    hasUsage = true;
+    cumulative.inputTokens += usage.inputTokens;
+    cumulative.outputTokens += usage.outputTokens;
+    cumulative.totalTokens += usage.totalTokens;
+    cacheReadTokens += usage.cacheReadTokens ?? 0;
+  }
+
+  if (!hasUsage) {
+    return null;
+  }
+  return cacheReadTokens > 0
+    ? { ...cumulative, cacheReadTokens }
+    : cumulative;
 }
 
 /**
@@ -169,4 +230,21 @@ export function formatTokenCount(count: number): string {
     return count.toLocaleString();
   }
   return `${(count / 1000).toFixed(1)}K`;
+}
+
+/**
+ * Prompt-cache hit rate against input tokens. Hidden when either side is 0.
+ */
+export function formatCacheHitRate(usage: TokenUsage): string | undefined {
+  const cache = usage.cacheReadTokens ?? 0;
+  if (cache <= 0 || usage.inputTokens <= 0) {
+    return undefined;
+  }
+  const percent = Math.min(100, Math.round((cache / usage.inputTokens) * 100));
+  return `${percent}%`;
+}
+
+/** Tokens that were not served from the prompt cache. */
+export function uniqueTokenCount(usage: TokenUsage): number {
+  return Math.max(0, usage.totalTokens - (usage.cacheReadTokens ?? 0));
 }

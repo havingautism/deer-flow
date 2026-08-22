@@ -66,7 +66,9 @@ const STRUCTURED_SUBAGENT_KEYS = [
 ];
 
 const SUCCESS_PREFIX = "Task Succeeded. Result:";
+const FORK_SUCCESS_PREFIX = "Fork Succeeded";
 const FAILURE_PREFIX = "Task failed.";
+const FORK_FAILURE_PREFIX = "Fork failed";
 const TIMEOUT_PREFIX = "Task timed out";
 const CANCELLED_PREFIX = "Task cancelled by user.";
 const POLLING_TIMEOUT_PREFIX = "Task polling timed out";
@@ -157,11 +159,24 @@ function parseLegacyTaskResult(trimmed: string): SubtaskResultUpdate {
     };
   }
 
+  if (trimmed.startsWith(FORK_SUCCESS_PREFIX)) {
+    const marker = "Result:";
+    const index = trimmed.indexOf(marker);
+    return {
+      status: "completed",
+      result: index >= 0 ? trimmed.slice(index + marker.length).trim() : "",
+    };
+  }
+
   if (trimmed.startsWith(FAILURE_PREFIX)) {
     return {
       status: "failed",
       error: trimmed.slice(FAILURE_PREFIX.length).trim(),
     };
+  }
+
+  if (trimmed.startsWith(FORK_FAILURE_PREFIX) || /^Fork [a-z_]+:/i.test(trimmed)) {
+    return { status: "failed", error: trimmed };
   }
 
   if (trimmed.startsWith(TIMEOUT_PREFIX)) {

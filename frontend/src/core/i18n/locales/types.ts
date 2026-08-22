@@ -605,9 +605,13 @@ export interface Translations {
     subtask: string;
     fork: string;
     executing: (count: number) => string;
+    executingForks: (count: number) => string;
     in_progress: string;
     completed: string;
     failed: string;
+    fork_in_progress: string;
+    fork_completed: string;
+    fork_failed: string;
   };
 
   // Token Usage
@@ -622,6 +626,8 @@ export interface Translations {
     unavailableShort: string;
     collecting: string;
     cache: string;
+    cacheRate: string;
+    unique: string;
     note: string;
     presets: {
       off: string;

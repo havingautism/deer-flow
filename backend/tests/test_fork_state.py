@@ -28,7 +28,9 @@ def test_fork_state_reuses_message_objects_and_appends_suffix():
     assert isinstance(suffix, HumanMessage)
     assert suffix.additional_kwargs.get(FORK_INSTRUCTION_KEY) is True
     assert "analyze option A" in suffix.content
-    assert isinstance(suffix, HumanMessage)
+    assert "You inherit this conversation" in suffix.content
+    assert "You may read and write workspace files" in suffix.content
+    assert "write_file and str_replace are blocked" not in suffix.content
     assert not isinstance(suffix, SystemMessage)
 
 

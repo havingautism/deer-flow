@@ -498,6 +498,7 @@ class RunJournal(BaseCallbackHandler):
                     if caller.startswith("subagent:"):
                         self._subagent_tokens += total_tk
                     elif caller.startswith("fork:"):
+                        # Counted in ``_total_*`` (header) but not lead or subagent.
                         pass
                     elif caller.startswith("middleware:"):
                         self._middleware_tokens += total_tk
@@ -797,6 +798,7 @@ class RunJournal(BaseCallbackHandler):
             if caller.startswith("subagent:"):
                 self._subagent_tokens += total_tk
             elif caller.startswith("fork:"):
+                # Counted in ``_total_*`` (header) but not lead or subagent.
                 pass
             elif caller.startswith("middleware:"):
                 self._middleware_tokens += total_tk

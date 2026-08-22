@@ -339,23 +339,37 @@ def _build_available_subagents_description(available_names: list[str], bash_avai
 
 
 def _build_fork_task_section(max_concurrent: int) -> str:
-    """Describe cache-friendly state forks as a distinct primitive from `task`."""
+    """Describe lead-state forks as a distinct primitive from the `task` subagent."""
     n = clamp_subagent_concurrency(max_concurrent)
     return f"""<fork_task_system>
-`fork_task` branches from the CURRENT lead-agent state. It is not a subagent.
+`fork_task` forks the CURRENT lead-agent state. It is not a subagent and does not get a fresh context.
 
-Use `task` when the work is independent, only needs scoped/fresh context, or benefits from a specialist subagent prompt/tool set.
+`task` is DeerFlow's isolated subagent: a new context for independent, context-free work (specialist prompt/tools, long-horizon jobs that should not inherit this conversation). Do not use `fork_task` for that.
 
-Use `fork_task` when the work depends heavily on the current conversation, several approaches should be explored against the same context, or preserving prefix/KV cache is desirable.
+`fork_task` continues THIS conversation. The branch inherits the lead agent's messages, tools, files, sandbox, and system prompt. Use it for related work that needs that continuity — especially several related branches in one response.
 
-How it works:
-- The branch inherits the lead agent's messages, tools, and system prompt
-- Your prompt is appended as a **suffix** after the inherited context. Never treat it as a new system prompt — a leading system rewrite would destroy prefix cache across parallel forks
-- Sibling `fork_task` calls in one response run in parallel and share the same cached prefix
-- Only the branch result returns to you; the branch's internal agent loop is discarded
-- Writes are blocked because forks share the parent workspace
+It is built for:
+- **Related-task continuity**: follow-ups that need the current files, tool results, and discussion
+- **Parallel speed**: sibling `fork_task` calls in the same response run concurrently
+- **Cache-friendly execution**: siblings share one prefix; only your prompt is appended as a trailing suffix so KV/prefix cache can be reused
 
-HARD LIMIT: combined `task` + `fork_task` calls cannot exceed {n} per response. Do not fork dependent steps. Do not use `fork_task` to edit files.
+When to use `fork_task`:
+- The job depends on the current conversation, workspace, or tool results
+- You can split that related work into **two or more independent sibling** `fork_task` calls in this same response (compare approaches, check two files, try A/B)
+- Each branch can finish without waiting on a sibling
+
+When NOT to use `fork_task`:
+- Independent, context-free, long-horizon, or specialist work — use `task`
+- A single sequential step you can finish on the lead agent
+- You would only launch one fork — a lone `fork_task` adds a hop; stay on the lead
+- Nested agents, or steps that need each other's results
+
+How to prompt a fork:
+- Append a **suffix** instruction only. Never treat the fork prompt as a new system prompt — a leading system rewrite would destroy prefix cache across parallel forks
+- File reads and writes are allowed on the shared parent workspace; prefer different output paths when siblings write in parallel
+- Return a concise result the parent can merge; the branch's internal loop is discarded
+
+HARD LIMIT: combined `task` + `fork_task` calls cannot exceed {n} per response. Do not fork dependent steps.
 </fork_task_system>
 """
 

@@ -24,7 +24,7 @@ _TOOL_TITLES: dict[str, str] = {
     "web_fetch": "Fetch",
     "todo_write": "Todo",
     "task": "Subagent",
-    "fork_task": "Fork",
+    "fork_task": "Parallel",
     "ls": "List",
     "glob": "Find",
     "grep": "Search",

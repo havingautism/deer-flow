@@ -35,13 +35,13 @@ describe("resolveSubtaskModelLabel", () => {
     expect(
       formatSubtaskTokenUsage(
         {
-          inputTokens: 10_000,
+          inputTokens: 20_000,
           outputTokens: 2_345,
-          totalTokens: 12_345,
-          cacheReadTokens: 12_000,
+          totalTokens: 22_345,
+          cacheReadTokens: 16_000,
         },
         "cache",
       ),
-    ).toBe("12.3K · 12.0K cache");
+    ).toBe("22.3K · 16.0K cache · 80%");
   });
 });

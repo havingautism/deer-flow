@@ -86,6 +86,36 @@ describe("computeNextSubtask", () => {
     expect(becameTerminal).toBe(false);
   });
 
+  it("does not let a pending failed rewrite clobber a completed result", () => {
+    const previous = baseTask({ status: "completed", result: "done" });
+
+    const { next } = computeNextSubtask(previous, {
+      id: "t1",
+      status: "failed",
+      error: "Parallel task failed",
+      prompt: "do it",
+      subagent_type: "fork",
+      description: "research",
+    });
+
+    expect(next.status).toBe("completed");
+    expect(next.result).toBe("done");
+    expect(next.error).toBeUndefined();
+  });
+
+  it("still applies a real ToolMessage failure after an in-progress card", () => {
+    const previous = baseTask({ status: "in_progress" });
+
+    const { next } = computeNextSubtask(previous, {
+      id: "t1",
+      status: "failed",
+      error: "Reached max_turns=25",
+    });
+
+    expect(next.status).toBe("failed");
+    expect(next.error).toBe("Reached max_turns=25");
+  });
+
   it("flags becameTerminal on the first transition to a terminal status", () => {
     const previous = baseTask({ status: "in_progress" });
 

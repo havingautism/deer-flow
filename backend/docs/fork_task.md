@@ -1,17 +1,18 @@
 # fork_task: cache-friendly lead-agent state forks
 
-`fork_task` is **not** a subagent. It branches from the lead agent's current `ThreadState` so several short/medium explorations can share one prefix (system prompt, tools, conversation) and only differ by a trailing instruction.
+`fork_task` is **not** a subagent. It forks the lead agent's current `ThreadState` so related work stays continuous with this conversation, can run in parallel, and can reuse prefix/KV cache. Only a trailing instruction differs across sibling branches.
 
-It coexists with `task()`:
+It coexists with `task()` — do not change `task`; that tool is the isolated subagent for independent, context-free work:
 
 | | `task` | `fork_task` |
 |---|---|---|
+| Role | isolated subagent | lead-state fork |
 | Context | scoped / fresh `ThreadState` | inherit lead state |
 | System prompt | subagent prompt | same as lead |
-| Tool schemas | subagent tools | same as lead (writes denied at execution) |
+| Tool schemas | subagent tools | same as lead |
 | Messages | newly constructed | parent messages + suffix |
 | Prefix / KV cache | rebuilt | shared prefix |
-| Fit | independent long-horizon work | parallel exploration of the current problem |
+| Fit | independent / context-free / long-horizon | related, parallel, cache-friendly continuation |
 | Merge | subagent result | `ForkResult` only — never the child loop |
 
 ## Prefix-cache contract
@@ -41,14 +42,14 @@ Branch-specific text **must** be a trailing `HumanMessage`. Do **not** inject a 
 - **Branch-local snapshot**: `todos`, `artifacts`, `viewed_images`, `promoted`, `delegations`, `skill_context`, `goal`, `background_tasks`.
 - **Not merged back**: the branch's internal `AIMessage` / `ToolMessage` loop is discarded. Only `ForkResult` returns to the parent.
 
-## Shared workspace (MVP)
+## Shared workspace
 
-Forks reuse the parent sandbox/workspace. Parallel writes would race even with `str_replace` path locks. MVP therefore **keeps write tools in the schema** (so the prefix stays identical) and **denies execution** via `ForkExecutionGuardMiddleware` when `context.is_fork` is set:
+Forks reuse the parent sandbox/workspace and **may read and write files**. Tool schemas stay on the model (prefix cache). `ForkExecutionGuardMiddleware` only denies nested agents and user interrupts when `context.is_fork` is set:
 
-- blocked: `write_file`, `str_replace`, `fork_task`, `task`, `ask_clarification`, `setup_agent`, `update_agent`, `present_files`
-- allowed: read/search/web, and bash with a prompt warning not to mutate files
+- blocked: `fork_task`, `task`, `ask_clarification`, `setup_agent`, `update_agent`, `present_files`
+- allowed: read/search/web, `write_file`, `str_replace`, and bash
 
-A later iteration can give each branch a worktree.
+Same-path mutations serialize through the sandbox file lock and read-before-write gate. Sibling forks should still prefer different output paths.
 
 ## Runtime
 
@@ -63,8 +64,8 @@ A later iteration can give each branch a worktree.
 
 ## Token usage in the UI
 
-Fork usage stays on the `fork_task` card. It is **not** merged into the lead turn's original token usage (header / per-turn / debug).
+Each `fork_task` card shows that branch's tokens, prompt-cache hits, and cache-hit rate in the expanded footer badge.
 
-- Lead `usage_metadata` and the header total keep the original lead (and `task()`) accounting
-- Each fork card shows that branch's tokens in an expanded footer badge (same shape as the header token chip). Prompt-cache hits are included when the provider reports `cache_read`.
-- `TokenUsageMiddleware` skips `fork_task` ToolMessages so branch tokens cannot fold into the dispatching AIMessage
+- After the branch finishes, collector records are reported to the parent `RunJournal`, so the **header thread total includes parallel-task tokens**
+- Lead `usage_metadata` (per-turn / debug) still excludes `fork_task` — `TokenUsageMiddleware` does not merge those ToolMessages into the dispatching AIMessage
+- Prompt-cache hits are included on the card when the provider reports `cache_read`

@@ -1,4 +1,8 @@
-import { formatTokenCount, type TokenUsage } from "@/core/messages/usage";
+import {
+  formatCacheHitRate,
+  formatTokenCount,
+  type TokenUsage,
+} from "@/core/messages/usage";
 import type { Model } from "@/core/models/types";
 
 /** Return the user-facing label for a configured subagent model. */
@@ -22,8 +26,16 @@ export function formatSubtaskTokenUsage(
     return undefined;
   }
   const total = formatTokenCount(usage.totalTokens);
-  if (usage.cacheReadTokens && usage.cacheReadTokens > 0 && cacheLabel) {
-    return `${total} · ${formatTokenCount(usage.cacheReadTokens)} ${cacheLabel}`;
+  if (!usage.cacheReadTokens || usage.cacheReadTokens <= 0 || !cacheLabel) {
+    return total;
   }
-  return total;
+  const parts = [
+    total,
+    `${formatTokenCount(usage.cacheReadTokens)} ${cacheLabel}`,
+  ];
+  const cacheRate = formatCacheHitRate(usage);
+  if (cacheRate) {
+    parts.push(cacheRate);
+  }
+  return parts.join(" · ");
 }

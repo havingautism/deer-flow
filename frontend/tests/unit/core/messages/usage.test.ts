@@ -1,7 +1,12 @@
 import type { Message } from "@langchain/langgraph-sdk";
 import { expect, test } from "@rstest/core";
 
-import { accumulateUsage, selectHeaderTokenUsage } from "@/core/messages/usage";
+import {
+  accumulateUsage,
+  formatCacheHitRate,
+  selectHeaderTokenUsage,
+  uniqueTokenCount,
+} from "@/core/messages/usage";
 import {
   getAssistantTurnUsageMessages,
   getMessageGroups,
@@ -181,4 +186,115 @@ test("falls back to visible messages when backend usage is unavailable or zero",
     outputTokens: 5,
     totalTokens: 15,
   });
+});
+
+test("header fallback includes fork_task tool usage when backend totals are missing", () => {
+  const messages = [
+    {
+      id: "ai-1",
+      type: "ai",
+      content: "forking",
+      usage_metadata: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+    },
+    {
+      id: "tool-fork-1",
+      type: "tool",
+      name: "fork_task",
+      tool_call_id: "fork-1",
+      content: "Fork Succeeded. Result: A",
+      additional_kwargs: {
+        subagent_token_usage: {
+          input_tokens: 100,
+          output_tokens: 10,
+          total_tokens: 110,
+          cache_read_tokens: 80,
+        },
+      },
+    },
+  ] as Message[];
+
+  expect(
+    selectHeaderTokenUsage({
+      backendUsage: null,
+      messages,
+    }),
+  ).toEqual({
+    inputTokens: 110,
+    outputTokens: 15,
+    totalTokens: 125,
+    cacheReadTokens: 80,
+  });
+});
+
+test("header backend totals are not double-counted with fork tool usage", () => {
+  const messages = [
+    {
+      id: "ai-1",
+      type: "ai",
+      content: "forking",
+      usage_metadata: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+    },
+    {
+      id: "tool-fork-1",
+      type: "tool",
+      name: "fork_task",
+      tool_call_id: "fork-1",
+      content: "Fork Succeeded. Result: A",
+      additional_kwargs: {
+        subagent_token_usage: {
+          input_tokens: 100,
+          output_tokens: 10,
+          total_tokens: 110,
+        },
+      },
+    },
+  ] as Message[];
+
+  expect(
+    selectHeaderTokenUsage({
+      backendUsage: { inputTokens: 125, outputTokens: 15, totalTokens: 140 },
+      messages,
+    }),
+  ).toEqual({
+    inputTokens: 125,
+    outputTokens: 15,
+    totalTokens: 140,
+  });
+});
+
+test("formats cache hit rate against input tokens", () => {
+  expect(
+    formatCacheHitRate({
+      inputTokens: 10_000,
+      outputTokens: 100,
+      totalTokens: 10_100,
+      cacheReadTokens: 8_000,
+    }),
+  ).toBe("80%");
+  expect(
+    formatCacheHitRate({
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      cacheReadTokens: 150,
+    }),
+  ).toBe("100%");
+  expect(
+    formatCacheHitRate({
+      inputTokens: 10_000,
+      outputTokens: 100,
+      totalTokens: 10_100,
+    }),
+  ).toBeUndefined();
+});
+
+test("formats unique tokens after subtracting cache hits", () => {
+  expect(
+    uniqueTokenCount({
+      inputTokens: 10_000,
+      outputTokens: 100,
+      totalTokens: 10_100,
+      cacheReadTokens: 8_000,
+    }),
+  ).toBe(2_100);
 });

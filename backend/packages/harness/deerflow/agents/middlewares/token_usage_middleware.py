@@ -236,7 +236,7 @@ def _subagent_usage_from_tool_message(message: ToolMessage) -> dict[str, int] | 
 
     ``fork_task`` results keep their usage on the ToolMessage for the fork card.
     Merging them here would fold branch tokens into the lead turn's original
-    usage_metadata, which the UI already shows separately.
+    usage_metadata (per-turn / debug). Thread header totals come from RunJournal.
     """
     if getattr(message, "name", None) == "fork_task":
         return None

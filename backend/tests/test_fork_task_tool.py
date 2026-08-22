@@ -99,7 +99,7 @@ class _FakeCollector:
     def __init__(self, caller):
         self.caller = caller
 
-    def snapshot_records(self):
+    def snapshot_records(self, messages=None, *, skip_objects=None):
         return [
             {
                 "source_run_id": "fork-run",
@@ -121,9 +121,13 @@ def test_executor_stamps_usage_without_parent_journal(monkeypatch):
         captured=captured,
     )
     monkeypatch.setattr("deerflow.forks.executor._ephemeral_graph", lambda g: g)
-    monkeypatch.setattr("deerflow.forks.executor.SubagentTokenCollector", _FakeCollector)
+    monkeypatch.setattr("deerflow.forks.executor.ForkTokenCollector", _FakeCollector)
 
-    journal = SimpleNamespace(deerflow_loop_bound=True, record_external_llm_usage_records=lambda *_: None)
+    recorded: list = []
+    journal = SimpleNamespace(
+        deerflow_loop_bound=True,
+        record_external_llm_usage_records=lambda recs: recorded.extend(recs),
+    )
     tracer = SimpleNamespace(name="trace")
     result = asyncio.run(
         ForkExecutor(
@@ -142,11 +146,89 @@ def test_executor_stamps_usage_without_parent_journal(monkeypatch):
         "cache_read_tokens": 80,
     }
     assert result.model_name == "test-model"
+    assert recorded == [
+        {
+            "source_run_id": "fork-run",
+            "caller": "fork:fork-1",
+            "model_name": "test-model",
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "total_tokens": 110,
+            "cache_read_tokens": 80,
+        }
+    ]
     callbacks = captured["config"]["callbacks"]
-    assert journal not in callbacks
-    assert tracer in callbacks
-    assert any(getattr(cb, "caller", "") == "fork:fork-1" for cb in callbacks)
+    handlers = getattr(callbacks, "handlers", None) or list(callbacks)
+    inheritable = getattr(callbacks, "inheritable_handlers", None) or []
+    assert journal not in handlers
+    assert tracer not in handlers
+    assert any(getattr(cb, "caller", "") == "fork:fork-1" for cb in handlers)
+    assert any(getattr(cb, "caller", "") == "fork:fork-1" for cb in inheritable)
     assert captured["config"]["tags"] == ["fork:fork-1"]
+
+
+def test_executor_does_not_count_parent_message_usage(monkeypatch):
+    parent_ai = AIMessage(
+        id="parent-ai",
+        content="parent answer",
+        usage_metadata={
+            "input_tokens": 20000,
+            "output_tokens": 100,
+            "total_tokens": 20100,
+            "input_token_details": {"cache_read": 20600},
+        },
+    )
+    graph = MagicMock()
+    graph.astream = _astream(
+        [
+            {
+                "messages": [
+                    parent_ai,
+                    HumanMessage(content="fork suffix"),
+                    AIMessage(
+                        id="fork-ai-1",
+                        content="searching",
+                        usage_metadata={
+                            "input_tokens": 21000,
+                            "output_tokens": 80,
+                            "total_tokens": 21080,
+                            "input_token_details": {"cache_read": 20600},
+                        },
+                    ),
+                    AIMessage(
+                        id="fork-ai-2",
+                        content="branch answer",
+                        usage_metadata={
+                            "input_tokens": 22000,
+                            "output_tokens": 400,
+                            "total_tokens": 22400,
+                            "input_token_details": {"cache_read": 21000},
+                        },
+                    ),
+                ]
+            }
+        ]
+    )
+    monkeypatch.setattr("deerflow.forks.executor._ephemeral_graph", lambda g: g)
+
+    result = asyncio.run(
+        ForkExecutor(graph=graph).aexecute(
+            prompt="check A",
+            parent_state={"messages": [parent_ai, HumanMessage(content="parent")]},
+            task_id="fork-1",
+        )
+    )
+    assert result.status == "completed"
+    assert result.token_usage == {
+        "input_tokens": 43000,
+        "output_tokens": 480,
+        "total_tokens": 43480,
+        "cache_read_tokens": 41600,
+    }
+    assert {record["source_run_id"] for record in result.token_usage_records} == {
+        "fork-ai-1",
+        "fork-ai-2",
+    }
 
 
 def test_executor_keeps_partial_answer_when_turn_capped(monkeypatch):
