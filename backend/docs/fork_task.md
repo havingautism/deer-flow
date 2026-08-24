@@ -42,6 +42,12 @@ Branch-specific text **must** be a trailing `HumanMessage`. Do **not** inject a 
 - **Branch-local snapshot**: `todos`, `artifacts`, `viewed_images`, `promoted`, `delegations`, `skill_context`, `goal`, `background_tasks`.
 - **Not merged back**: the branch's internal `AIMessage` / `ToolMessage` loop is discarded. Only `ForkResult` returns to the parent.
 
+The sandbox is the one deliberate ownership handoff: fork middleware never
+releases it. `ForkResult` carries the effective `sandbox_id` into the parent
+`Command`, so the lead state remains the sole lifecycle owner and releases the
+provider lease only after the parent run finishes. This also covers siblings
+that lazily acquire the sandbox before the lead has used a file tool.
+
 ## Shared workspace
 
 Forks reuse the parent sandbox/workspace and **may read and write files**. Tool schemas stay on the model (prefix cache). `ForkExecutionGuardMiddleware` only denies nested agents and user interrupts when `context.is_fork` is set:
@@ -56,6 +62,7 @@ Same-path mutations serialize through the sandbox file lock and read-before-writ
 - Tool: `fork_task(prompt)`
 - Enable: `configurable.fork_enabled` (defaults to `subagent_enabled`)
 - Host graph: `ForkHostMiddleware` attaches the compiled lead graph and republishes it in `wrap_tool_call` (tool-node ContextVar), not only `before_agent`
+- SDK factory customization: `RuntimeFeatures(fork=<middleware>)` adds the custom policy middleware while retaining the mandatory `ForkHostMiddleware` and `ForkExecutionGuardMiddleware`
 - Concurrency: counted together with `task` by `SubagentLimitMiddleware`
 - Recursion: conversational cap `DEFAULT_FORK_MAX_TURNS = 25`, mapped to a higher LangGraph `recursion_limit` because that counter includes middleware nodes. A usable partial answer is kept if the cap still trips.
 - Persistence: ephemeral copy of the lead graph with `checkpointer=False`

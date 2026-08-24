@@ -285,6 +285,19 @@ def test_after_agent_releases_own_sandbox_state() -> None:
     assert provider.released_ids == ["own-sandbox"]
 
 
+def test_after_agent_keeps_fork_sandbox_active_for_parent() -> None:
+    provider = _AsyncOnlyProvider()
+    set_sandbox_provider(provider)
+    try:
+        state = {"sandbox": {"sandbox_id": "shared-sandbox"}}
+        result = SandboxMiddleware().after_agent(state, Runtime(context={"is_fork": True}))
+    finally:
+        reset_sandbox_provider()
+
+    assert result is None
+    assert provider.released_ids == []
+
+
 @pytest.mark.anyio
 async def test_aafter_agent_unwraps_overwrite_sandbox_state() -> None:
     provider = _AsyncOnlyProvider()
@@ -311,6 +324,20 @@ async def test_aafter_agent_releases_own_sandbox_state() -> None:
 
     assert result is None
     assert provider.released_ids == ["own-sandbox"]
+
+
+@pytest.mark.anyio
+async def test_aafter_agent_keeps_fork_sandbox_active_for_parent() -> None:
+    provider = _AsyncOnlyProvider()
+    set_sandbox_provider(provider)
+    try:
+        state = {"sandbox": {"sandbox_id": "shared-sandbox"}}
+        result = await SandboxMiddleware().aafter_agent(state, Runtime(context={"is_fork": True}))
+    finally:
+        reset_sandbox_provider()
+
+    assert result is None
+    assert provider.released_ids == []
 
 
 # ---------------------------------------------------------------------------

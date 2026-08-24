@@ -27,6 +27,10 @@ class ForkResult:
     token_usage: dict[str, int] | None = None
     token_usage_records: list[dict] = field(default_factory=list)
     model_name: str | None = None
+    # A fork borrows (or lazily acquires) the parent thread's sandbox. The
+    # parent Command must retain that id so the normal lead lifecycle remains
+    # the sole owner that eventually releases it.
+    sandbox: dict[str, object] | None = None
 
     def as_display_text(self) -> str:
         if self.status == "completed":

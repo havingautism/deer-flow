@@ -19,6 +19,7 @@ from deerflow.forks.collector import (
 from deerflow.forks.host import get_fork_host_graph
 from deerflow.forks.result import ForkResult
 from deerflow.forks.state import fork_state, strip_in_flight_fork_message
+from deerflow.sandbox.overwrite import unwrap_sandbox
 from deerflow.subagents.token_collector import (
     model_name_from_usage_records,
     summarize_token_usage_records,
@@ -139,6 +140,18 @@ def _artifacts(result_state: Any) -> list[str]:
     return []
 
 
+def _sandbox_state(result_state: Any, context: dict[str, Any] | None = None) -> dict[str, object] | None:
+    """Return the sandbox lease that the parent must retain after the fork."""
+    raw = result_state.get("sandbox") if isinstance(result_state, dict) else None
+    sandbox, _ = unwrap_sandbox(raw)
+    if isinstance(sandbox, dict) and sandbox.get("sandbox_id"):
+        return dict(sandbox)
+    sandbox_id = context.get("sandbox_id") if isinstance(context, dict) else None
+    if sandbox_id:
+        return {"sandbox_id": str(sandbox_id)}
+    return None
+
+
 def _result_from_state(
     result_state: Any,
     *,
@@ -148,6 +161,7 @@ def _result_from_state(
 ) -> ForkResult:
     text, receipts = extract_branch_result(result_state)
     artifacts = _artifacts(result_state)
+    sandbox = _sandbox_state(result_state)
     if text:
         return ForkResult(
             task_id=task_id,
@@ -156,6 +170,7 @@ def _result_from_state(
             artifacts=artifacts,
             tool_receipts=receipts,
             stop_reason="turn_capped" if turn_capped else None,
+            sandbox=sandbox,
         )
     if turn_capped:
         return ForkResult(
@@ -165,6 +180,7 @@ def _result_from_state(
             artifacts=artifacts,
             tool_receipts=receipts,
             stop_reason="turn_capped",
+            sandbox=sandbox,
         )
     return ForkResult(
         task_id=task_id,
@@ -172,6 +188,7 @@ def _result_from_state(
         error="Fork completed without a final assistant answer.",
         artifacts=artifacts,
         tool_receipts=receipts,
+        sandbox=sandbox,
     )
 
 
@@ -201,9 +218,7 @@ class ForkExecutor:
             )
 
         branch_state = fork_state(parent_state, prompt)
-        inherited_messages = strip_in_flight_fork_message(
-            parent_state.get("messages") if isinstance(parent_state, dict) else None
-        )
+        inherited_messages = strip_in_flight_fork_message(parent_state.get("messages") if isinstance(parent_state, dict) else None)
         collector = ForkTokenCollector(caller=f"fork:{task_id}")
         # Do not put checkpoint coordinates in the child config. Passing
         # thread_id/checkpoint_ns starts a new root lineage and can leak child
@@ -246,7 +261,12 @@ class ForkExecutor:
         except Exception as exc:
             logger.exception("Forked branch %s failed", task_id)
             result = _stamp_usage(
-                ForkResult(task_id=task_id, status="failed", error=str(exc)),
+                ForkResult(
+                    task_id=task_id,
+                    status="failed",
+                    error=str(exc),
+                    sandbox=_sandbox_state(final_state, context),
+                ),
                 collector,
                 inherited_messages=inherited_messages,
             )

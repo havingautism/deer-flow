@@ -6,6 +6,8 @@ import type { SubtaskStep } from "./steps";
 
 export interface Subtask {
   id: string;
+  /** Owning run for persisted history; absent for the active live stream. */
+  runId?: string;
   status: "in_progress" | "completed" | "failed";
   subagent_type: string;
   description: string;

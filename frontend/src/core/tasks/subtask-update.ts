@@ -1,6 +1,10 @@
 import { mergeSteps } from "./steps";
 import type { Subtask } from "./types";
 
+export function subtaskStoreKey(id: string, runId?: string): string {
+  return runId ? `${runId}:${id}` : id;
+}
+
 export function isTerminalSubtaskStatus(status: Subtask["status"] | undefined) {
   return status === "completed" || status === "failed";
 }

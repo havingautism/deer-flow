@@ -333,11 +333,14 @@ def _assemble_from_features(
         from deerflow.forks import ForkExecutionGuardMiddleware, ForkHostMiddleware
         from deerflow.tools.builtins import fork_task_tool
 
+        # Host publication and execution guards are infrastructure, not the
+        # replaceable policy hook. A custom fork middleware is additive so the
+        # tool can still resolve its graph and cannot bypass nested-delegation
+        # restrictions.
+        chain.append(ForkHostMiddleware())
         if isinstance(feat.fork, AgentMiddleware):
             chain.append(feat.fork)
-        else:
-            chain.append(ForkHostMiddleware())
-            chain.append(ForkExecutionGuardMiddleware())
+        chain.append(ForkExecutionGuardMiddleware())
         extra_tools.append(fork_task_tool)
 
     # --- [12] LoopDetection ---

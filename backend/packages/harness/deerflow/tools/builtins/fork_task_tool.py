@@ -35,25 +35,26 @@ def _parent_state(runtime: Runtime | None):
 
 
 def _fork_result_command(*, tool_call_id: str, fork_result) -> Command:
-    return Command(
-        update={
-            "messages": [
-                ToolMessage(
-                    content=fork_result.as_display_text(),
-                    tool_call_id=tool_call_id,
-                    name="fork_task",
-                    additional_kwargs=make_subagent_additional_kwargs(
-                        fork_result.status,
-                        result=fork_result.result,
-                        error=fork_result.error,
-                        stop_reason=fork_result.stop_reason,
-                        model_name=fork_result.model_name,
-                        token_usage=fork_result.token_usage,
-                    ),
-                )
-            ]
-        }
-    )
+    update: dict[str, object] = {
+        "messages": [
+            ToolMessage(
+                content=fork_result.as_display_text(),
+                tool_call_id=tool_call_id,
+                name="fork_task",
+                additional_kwargs=make_subagent_additional_kwargs(
+                    fork_result.status,
+                    result=fork_result.result,
+                    error=fork_result.error,
+                    stop_reason=fork_result.stop_reason,
+                    model_name=fork_result.model_name,
+                    token_usage=fork_result.token_usage,
+                ),
+            )
+        ]
+    }
+    if fork_result.sandbox is not None:
+        update["sandbox"] = fork_result.sandbox
+    return Command(update=update)
 
 
 @tool("fork_task", parse_docstring=True)

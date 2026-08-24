@@ -73,6 +73,7 @@ import type { Subtask } from "@/core/tasks";
 import { useUpdateSubtask } from "@/core/tasks/context";
 import {
   derivePendingSubtaskStatus,
+  getParallelTaskScopeMessages,
   parseSubtaskResult,
 } from "@/core/tasks/subtask-result";
 import type { AgentThreadState } from "@/core/threads";
@@ -1236,7 +1237,6 @@ export function MessageList({
                 );
               } else if (group.type === "assistant:subagent") {
                 const tasks = new Set<Subtask>();
-                const taskIds = new Set<string>();
                 for (const message of group.messages) {
                   if (message.type !== "ai") {
                     continue;
@@ -1247,9 +1247,14 @@ export function MessageList({
                       if (!taskId) {
                         continue;
                       }
+                      const runId = (message as { run_id?: string }).run_id;
+                      const scopedMessages = getParallelTaskScopeMessages(
+                        message,
+                        messages,
+                      );
                       const status = derivePendingSubtaskStatus(
                         taskId,
-                        messages,
+                        scopedMessages,
                         pendingTaskLoading,
                       );
                       const prompt =
@@ -1266,6 +1271,7 @@ export function MessageList({
                               : t.subtasks.subtask);
                       const task: Subtask = {
                         id: taskId,
+                        ...(runId ? { runId } : {}),
                         subagent_type:
                           toolCall.name === "fork_task"
                             ? "fork"
@@ -1275,27 +1281,26 @@ export function MessageList({
                         status,
                       };
                       updateSubtask(task);
-                      taskIds.add(taskId);
                       tasks.add(task);
+                      for (const scopedMessage of scopedMessages) {
+                        if (
+                          scopedMessage.type !== "tool" ||
+                          scopedMessage.tool_call_id !== taskId
+                        ) {
+                          continue;
+                        }
+                        const parsed = parseSubtaskResult(
+                          extractTextFromMessage(scopedMessage),
+                          scopedMessage.additional_kwargs,
+                        );
+                        updateSubtask({
+                          id: taskId,
+                          ...(runId ? { runId } : {}),
+                          ...parsed,
+                        });
+                      }
                     }
                   }
-                }
-                // Command-returned ToolMessages can land after the lead
-                // answer, in a later group. Read the whole thread so a
-                // finished fork/task is not left as pending-failed.
-                for (const message of messages) {
-                  if (message.type !== "tool") {
-                    continue;
-                  }
-                  const taskId = message.tool_call_id;
-                  if (!taskId || !taskIds.has(taskId)) {
-                    continue;
-                  }
-                  const parsed = parseSubtaskResult(
-                    extractTextFromMessage(message),
-                    message.additional_kwargs,
-                  );
-                  updateSubtask({ id: taskId, ...parsed });
                 }
 
                 const results: React.ReactNode[] = [];

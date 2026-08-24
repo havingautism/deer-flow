@@ -100,6 +100,14 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
 
     @override
     def after_agent(self, state: SandboxMiddlewareState, runtime: Runtime) -> dict | None:
+        from deerflow.forks.runtime import is_fork_runtime
+
+        if is_fork_runtime(runtime):
+            # Forks share the parent thread's sandbox. Their ToolMessage Command
+            # returns the sandbox id to the parent state, whose normal lifecycle
+            # remains the sole owner allowed to release it.
+            logger.info("Not releasing sandbox from forked branch")
+            return None
         sandbox, fork_restored = unwrap_sandbox(state.get("sandbox"))
         if sandbox is not None:
             sandbox_id = sandbox["sandbox_id"]
@@ -123,6 +131,11 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
 
     @override
     async def aafter_agent(self, state: SandboxMiddlewareState, runtime: Runtime) -> dict | None:
+        from deerflow.forks.runtime import is_fork_runtime
+
+        if is_fork_runtime(runtime):
+            logger.info("Not releasing sandbox from forked branch")
+            return None
         sandbox, fork_restored = unwrap_sandbox(state.get("sandbox"))
         if sandbox is not None:
             sandbox_id = sandbox["sandbox_id"]

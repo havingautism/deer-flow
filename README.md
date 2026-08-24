@@ -1116,6 +1116,8 @@ The lead agent can spawn sub-agents on the fly — each with its own scoped cont
 
 For example, independent read-only research can run concurrently when the wall-clock savings outweigh duplicated discovery and synthesis cost, while a repository refactor with shared files and sequential test feedback remains with the lead agent. When `max_concurrent_subagents` is `1`, parallel and multi-batch routing guidance is disabled; delegation remains available only for material specialist or context-isolation benefit.
 
+For related work that depends on the current conversation, DeerFlow can instead launch sibling `fork_task` branches. These branches retain the lead agent's message prefix, tools, files, and sandbox, append only a branch-specific suffix, and return a compact result to the lead. This makes A/B inspection or several independent checks cache-friendly without turning them into isolated sub-agents. Forks share the workspace, so sibling writes should target different paths; combined `task` and `fork_task` calls obey the same concurrency limit. Enable forks with runtime `fork_enabled` (it defaults to `subagent_enabled`).
+
 ### Sandbox & File System
 
 `E2BSandboxProvider` uses `wait` as its default overflow policy. It waits for

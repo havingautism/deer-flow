@@ -76,7 +76,7 @@ export function SubtaskCard({
 }) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
-  const task = useSubtask(taskId)!;
+  const task = useSubtask(taskId, runId)!;
   const { tokenUsageEnabled } = useModels();
   const updateSubtask = useUpdateSubtask();
   const isFork = task.subagent_type === "fork";
@@ -124,7 +124,7 @@ export function SubtaskCard({
     fetchSubtaskSteps(threadId, runId, taskId)
       .then((steps) => {
         if (steps.length > 0) {
-          updateSubtask({ id: taskId, steps });
+          updateSubtask({ id: taskId, runId, steps });
         }
       })
       .catch(() => {

@@ -253,6 +253,29 @@ def test_fork_injects_fork_task_tool(mock_create_agent):
     assert "fork_task" in tool_names
 
 
+@patch("deerflow.agents.factory.create_agent")
+def test_custom_fork_middleware_keeps_required_host_and_guard(mock_create_agent):
+    from langchain.agents.middleware import AgentMiddleware
+
+    from deerflow.forks import ForkExecutionGuardMiddleware, ForkHostMiddleware
+
+    class MyForkMiddleware(AgentMiddleware):
+        pass
+
+    graph = MagicMock(name="compiled_graph")
+    mock_create_agent.return_value = graph
+    custom = MyForkMiddleware()
+
+    create_deerflow_agent(_make_mock_model(), features=RuntimeFeatures(fork=custom, sandbox=False))
+
+    middleware = mock_create_agent.call_args.kwargs["middleware"]
+    assert custom in middleware
+    hosts = [item for item in middleware if isinstance(item, ForkHostMiddleware)]
+    assert len(hosts) == 1
+    assert hosts[0].graph is graph
+    assert sum(isinstance(item, ForkExecutionGuardMiddleware) for item in middleware) == 1
+
+
 # ---------------------------------------------------------------------------
 # 9. Middleware ordering — ClarificationMiddleware always last
 # ---------------------------------------------------------------------------

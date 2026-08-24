@@ -4,6 +4,7 @@ import type { SubtaskStep } from "@/core/tasks/steps";
 import {
   computeNextSubtask,
   isTerminalSubtaskStatus,
+  subtaskStoreKey,
   subtaskNotification,
 } from "@/core/tasks/subtask-update";
 import type { Subtask } from "@/core/tasks/types";
@@ -242,5 +243,16 @@ describe("isTerminalSubtaskStatus", () => {
     expect(isTerminalSubtaskStatus("failed")).toBe(true);
     expect(isTerminalSubtaskStatus("in_progress")).toBe(false);
     expect(isTerminalSubtaskStatus(undefined)).toBe(false);
+  });
+});
+
+describe("subtaskStoreKey", () => {
+  it("separates reused provider task ids across runs", () => {
+    expect(subtaskStoreKey("call-1", "run-a")).toBe("run-a:call-1");
+    expect(subtaskStoreKey("call-1", "run-b")).toBe("run-b:call-1");
+  });
+
+  it("keeps the live key when a run id is unavailable", () => {
+    expect(subtaskStoreKey("call-1")).toBe("call-1");
   });
 });

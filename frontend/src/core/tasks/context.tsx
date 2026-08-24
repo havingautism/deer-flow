@@ -7,7 +7,11 @@ import {
   useState,
 } from "react";
 
-import { computeNextSubtask, subtaskNotification } from "./subtask-update";
+import {
+  computeNextSubtask,
+  subtaskNotification,
+  subtaskStoreKey,
+} from "./subtask-update";
 import type { Subtask } from "./types";
 
 export interface SubtaskContextValue {
@@ -50,9 +54,9 @@ export function useSubtaskContext() {
   return context;
 }
 
-export function useSubtask(id: string) {
+export function useSubtask(id: string, runId?: string) {
   const { tasks } = useSubtaskContext();
-  return tasks[id];
+  return tasks[subtaskStoreKey(id, runId)];
 }
 
 export function useUpdateSubtask() {
@@ -74,12 +78,13 @@ export function useUpdateSubtask() {
       // fetchSubtaskSteps().then(updateSubtask) resolving late would write a stale
       // map, clobbering SSE steps/status and sibling subtasks added meanwhile (#3779).
       const current = tasksRef.current;
+      const key = subtaskStoreKey(task.id, task.runId);
       const { next, becameTerminal, changed } = computeNextSubtask(
-        current[task.id],
+        current[key],
         task,
       );
 
-      current[task.id] = next;
+      current[key] = next;
 
       // Gate on an actual state change, not mere field presence. The terminal
       // ToolMessage is re-parsed on every MessageList render and always carries

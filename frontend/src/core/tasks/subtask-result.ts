@@ -210,6 +210,44 @@ export function hasSubtaskToolResult(
   );
 }
 
+function messageRunId(message: Message): string | undefined {
+  const value = (message as Message & { run_id?: unknown }).run_id;
+  return typeof value === "string" && value ? value : undefined;
+}
+
+/**
+ * Limit task-result correlation to the dispatching run. Live SDK messages do
+ * not always carry run_id, so fall back to the surrounding human turn.
+ */
+export function getParallelTaskScopeMessages(
+  dispatchMessage: Message,
+  messages: Message[],
+): Message[] {
+  const runId = messageRunId(dispatchMessage);
+  if (runId) {
+    return messages.filter((message) => messageRunId(message) === runId);
+  }
+
+  const dispatchIndex = messages.findIndex(
+    (message) =>
+      message === dispatchMessage ||
+      (dispatchMessage.id !== undefined && message.id === dispatchMessage.id),
+  );
+  if (dispatchIndex < 0) {
+    return [dispatchMessage];
+  }
+
+  let start = dispatchIndex;
+  while (start > 0 && messages[start]?.type !== "human") {
+    start -= 1;
+  }
+  let end = dispatchIndex + 1;
+  while (end < messages.length && messages[end]?.type !== "human") {
+    end += 1;
+  }
+  return messages.slice(start, end);
+}
+
 export function derivePendingSubtaskStatus(
   toolCallId: string | undefined,
   messages: Message[],

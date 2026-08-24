@@ -95,6 +95,22 @@ def test_executor_does_not_merge_child_state(monkeypatch):
     assert "thread_id" not in (captured["config"].get("configurable") or {})
 
 
+def test_executor_returns_sandbox_ownership_to_parent(monkeypatch):
+    graph = MagicMock()
+    graph.astream = _astream([{"messages": [AIMessage(content="branch answer")], "sandbox": {"sandbox_id": "shared-sandbox"}}])
+    monkeypatch.setattr("deerflow.forks.executor._ephemeral_graph", lambda g: g)
+
+    result = asyncio.run(
+        ForkExecutor(graph=graph).aexecute(
+            prompt="write a file",
+            parent_state={"messages": [HumanMessage(content="parent")]},
+            task_id="fork-sandbox",
+        )
+    )
+
+    assert result.sandbox == {"sandbox_id": "shared-sandbox"}
+
+
 class _FakeCollector:
     def __init__(self, caller):
         self.caller = caller
@@ -290,6 +306,7 @@ def test_fork_task_tool_returns_parent_command(monkeypatch):
                 "cache_read_tokens": 80,
             },
             model_name="test-model",
+            sandbox={"sandbox_id": "shared-sandbox"},
         )
 
     monkeypatch.setattr(fork_task_module.ForkExecutor, "aexecute", fake_aexecute)
@@ -309,6 +326,7 @@ def test_fork_task_tool_returns_parent_command(monkeypatch):
     assert message.tool_call_id == "tc-fork"
     assert message.additional_kwargs[SUBAGENT_MODEL_NAME_KEY] == "test-model"
     assert message.additional_kwargs[SUBAGENT_TOKEN_USAGE_KEY]["cache_read_tokens"] == 80
+    assert output.update["sandbox"] == {"sandbox_id": "shared-sandbox"}
 
 
 def test_nested_fork_task_is_rejected(monkeypatch):

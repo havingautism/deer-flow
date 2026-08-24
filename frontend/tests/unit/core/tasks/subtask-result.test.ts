@@ -12,6 +12,7 @@ import {
   SUBAGENT_STOP_REASON_KEY,
   SUBAGENT_TOKEN_USAGE_KEY,
   derivePendingSubtaskStatus,
+  getParallelTaskScopeMessages,
   hasSubtaskToolResult,
   parseSubtaskResult,
 } from "@/core/tasks/subtask-result";
@@ -100,7 +101,9 @@ describe("parseSubtaskResult", () => {
       error: "Fork failed (capped: turn_capped): no answer",
     });
 
-    expect(parseSubtaskResult("Fork failed: Nested fork_task is not allowed.")).toEqual({
+    expect(
+      parseSubtaskResult("Fork failed: Nested fork_task is not allowed."),
+    ).toEqual({
       status: "failed",
       error: "Fork failed: Nested fork_task is not allowed.",
     });
@@ -173,6 +176,58 @@ describe("derivePendingSubtaskStatus", () => {
     expect(derivePendingSubtaskStatus("call_fork_1", messages, false)).toBe(
       "in_progress",
     );
+  });
+});
+
+describe("getParallelTaskScopeMessages", () => {
+  it("keeps historical task results inside the owning run", () => {
+    const dispatchA = {
+      id: "dispatch-a",
+      type: "ai",
+      run_id: "run-a",
+    } as Message;
+    const resultA = {
+      type: "tool",
+      run_id: "run-a",
+      tool_call_id: "reused-call-id",
+    } as Message;
+    const dispatchB = {
+      id: "dispatch-b",
+      type: "ai",
+      run_id: "run-b",
+    } as Message;
+    const resultB = {
+      type: "tool",
+      run_id: "run-b",
+      tool_call_id: "reused-call-id",
+    } as Message;
+
+    expect(
+      getParallelTaskScopeMessages(dispatchA, [
+        dispatchA,
+        resultA,
+        dispatchB,
+        resultB,
+      ]),
+    ).toEqual([dispatchA, resultA]);
+  });
+
+  it("falls back to the surrounding human turn for live messages", () => {
+    const previous = { type: "tool", tool_call_id: "reused" } as Message;
+    const human = { type: "human", id: "human-current" } as Message;
+    const dispatch = { type: "ai", id: "dispatch-current" } as Message;
+    const result = { type: "tool", tool_call_id: "reused" } as Message;
+    const nextHuman = { type: "human", id: "human-next" } as Message;
+
+    expect(
+      getParallelTaskScopeMessages(dispatch, [
+        previous,
+        human,
+        dispatch,
+        result,
+        nextHuman,
+      ]),
+    ).toEqual([human, dispatch, result]);
   });
 });
 
